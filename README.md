@@ -1,4 +1,4 @@
-# FPL Radar
+# Mr FPL Performance
 
 Compara jugadores de la Fantasy Premier League con radares de percentiles por posición.
 App 100% estática (Next.js `output: 'export'`) hosteada en GitHub Pages. Sin backend.
