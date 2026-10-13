@@ -100,7 +100,7 @@ export default function PlayerTable({ players }: { players: Player[] }) {
         <Link
           className="btn"
           aria-disabled={!canCompare}
-          href={{ pathname: "/compare/", query: { ids: selected.join(",") } }}
+          href={`/compare/?ids=${selected.join(",")}`}
         >
           Comparar ({selected.length}/{MAX_COMPARE})
         </Link>
