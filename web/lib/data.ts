@@ -42,6 +42,44 @@ export interface Meta {
   hasHistory: boolean;
   dataFetchedAt: string;
   generatedAt: string;
+  deadlines: { gw: number; deadline: string | null }[];
+}
+
+export interface CaptainFixture {
+  gw: number;
+  opp: string;
+  home: boolean;
+  difficulty: number;
+}
+
+export interface CaptainPick {
+  rank: number;
+  id: number;
+  name: string;
+  team: string;
+  pos: Position;
+  price: number;
+  role: "C" | "V" | null;
+  score: number;
+  form: number | null;
+  xgi90: number | null;
+  fdr: number;
+  ease: number;
+  dgw: boolean;
+  fixtures: CaptainFixture[];
+  pct: { form: number; xgi90: number; ease: number };
+}
+
+export interface Captain {
+  gw: number | null;
+  deadline: string | null;
+  horizonGws: number;
+  weights: { form: number; xgi90: number; ease: number };
+  minMinutesPct: number;
+  minChanceOfPlaying: number;
+  candidates: number;
+  top: CaptainPick[];
+  discarded: { id: number; name: string; team: string; pos: Position; reason: string }[];
 }
 
 type State<T> = { data: T | null; error: string | null };
@@ -66,3 +104,4 @@ function useJson<T>(path: string): State<T> {
 
 export const usePlayers = () => useJson<Player[]>("/data/players.json");
 export const useMeta = () => useJson<Meta>("/data/meta.json");
+export const useCaptain = () => useJson<Captain>("/data/captain.json");

@@ -33,6 +33,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/compare/" className="nav-link">
               Comparar
             </Link>
+            <Link href="/captain/" className="nav-link">
+              Capitán
+            </Link>
           </nav>
         </header>
         <main>{children}</main>
