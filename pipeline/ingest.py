@@ -44,6 +44,7 @@ ELEMENT_FIELDS = [
     "team",
     "element_type",
     "status",
+    "chance_of_playing_next_round",
     "now_cost",
     "total_points",
     "minutes",
@@ -53,7 +54,19 @@ ELEMENT_FIELDS = [
     "bps",
     *FLOAT_STR_FIELDS,
 ]
-FIXTURE_FIELDS = ["id", "event", "team_h", "team_a", "finished", "kickoff_time", "team_h_score", "team_a_score"]
+FIXTURE_FIELDS = [
+    "id",
+    "event",
+    "team_h",
+    "team_a",
+    "finished",
+    "kickoff_time",
+    "team_h_score",
+    "team_a_score",
+    "team_h_difficulty",
+    "team_a_difficulty",
+]
+EVENT_FIELDS = ["id", "deadline_time", "finished", "is_current", "is_next"]
 HISTORY_FIELDS = ["element", "fixture", "round", "total_points", "minutes", "kickoff_time"]
 
 
@@ -145,6 +158,14 @@ def current_gw(events: list[dict]) -> int:
     return max(finished, default=0)
 
 
+def next_gw(events: list[dict]) -> int | None:
+    """GW del próximo deadline (is_next); None si la temporada ha terminado."""
+    for ev in events:
+        if ev.get("is_next"):
+            return int(ev["id"])
+    return None
+
+
 def gws_finished(events: list[dict]) -> int:
     return sum(1 for ev in events if ev.get("finished"))
 
@@ -161,6 +182,7 @@ def build_snapshot(bootstrap: dict, fetched_at: datetime) -> pl.DataFrame:
     events = bootstrap["events"]
     return (
         elements.with_columns(pl.col(c).cast(pl.Float64, strict=False) for c in FLOAT_STR_FIELDS)
+        .with_columns(pl.col("chance_of_playing_next_round").cast(pl.Int32, strict=False))
         .join(teams, on="team", how="left")
         .join(positions, on="element_type", how="left")
         .with_columns(
@@ -175,7 +197,21 @@ def build_snapshot(bootstrap: dict, fetched_at: datetime) -> pl.DataFrame:
 def build_fixtures(fixtures: list[dict]) -> pl.DataFrame:
     return pl.DataFrame(
         [{k: fx.get(k) for k in FIXTURE_FIELDS} for fx in fixtures],
-        schema_overrides={"event": pl.Int32, "team_h_score": pl.Int32, "team_a_score": pl.Int32},
+        schema_overrides={
+            "event": pl.Int32,
+            "team_h_score": pl.Int32,
+            "team_a_score": pl.Int32,
+            "team_h_difficulty": pl.Int32,
+            "team_a_difficulty": pl.Int32,
+        },
+    )
+
+
+def build_events(events: list[dict]) -> pl.DataFrame:
+    return pl.DataFrame(
+        [{k: ev.get(k) for k in EVENT_FIELDS} for ev in events],
+        schema={"id": pl.Int32, "deadline_time": pl.String, "finished": pl.Boolean,
+                "is_current": pl.Boolean, "is_next": pl.Boolean},
     )
 
 
@@ -214,6 +250,7 @@ def run(
     players = build_snapshot(bootstrap, datetime.now(UTC))
     players.write_parquet(path)
     build_fixtures(fixtures).write_parquet(snapshot_path(out_dir, gw, "fixtures"))
+    build_events(bootstrap["events"]).write_parquet(snapshot_path(out_dir, gw, "events"))
     print(f"GW{gw}: {players.height} jugadores → {path}")
 
     if history:

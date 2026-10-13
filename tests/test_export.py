@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -10,7 +11,8 @@ from pipeline.metrics import METRICS
 def exported(tmp_path, fpl_transport):
     snap = tmp_path / "snapshots"
     ingest.run(snap, transport=fpl_transport)
-    players_path, meta_path = export.run(snap, tmp_path / "out")
+    cfg = Path(__file__).parents[1] / "config" / "captain.yml"
+    players_path, meta_path = export.run(snap, tmp_path / "out", cfg)
     return players_path, json.loads(players_path.read_text()), json.loads(meta_path.read_text())
 
 
@@ -41,6 +43,14 @@ def test_meta_json(exported, bootstrap):
     assert meta["minMinutes"] >= 270
     assert meta["hasHistory"] is False
     assert meta["dataFetchedAt"] and meta["generatedAt"]
+    assert [d["gw"] for d in meta["deadlines"]] == [e["id"] for e in bootstrap["events"]]
+
+
+def test_captain_json_written(exported, bootstrap):
+    path, _, _ = exported
+    cap = json.loads((path.parent / "captain.json").read_text())
+    assert cap["gw"] == ingest.next_gw(bootstrap["events"])
+    assert {"top", "discarded", "weights", "candidates"} <= cap.keys()
 
 
 def test_latest_gw_ignores_side_files(tmp_path):

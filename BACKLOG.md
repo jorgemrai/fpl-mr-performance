@@ -6,6 +6,11 @@
 - Forma real de 3 GW usando `--history` (element-summary) como eje opcional del radar.
 - Métricas defensivas (CS/90, goles encajados/90, saves/90 para GKP).
 
+## Capitán (fuera del alcance de la v1)
+- Capitán sobre la plantilla del usuario (requiere import de equipo).
+- Hedge / capitán diferencial según ownership (concentración).
+- Backtesting de los pesos de `config/captain.yml` contra puntos reales.
+
 ## Fase 3 — Producto
 - Import de equipo por ID de manager (vía JSON pre-generado, sigue sin backend).
 - Optimizador de transferencias / plantilla.

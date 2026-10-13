@@ -20,16 +20,19 @@ GitHub Actions (cron) ──> pipeline/ (Python) ──> web/public/data/*.json 
 ```
 pipeline/
   ingest.py          # bootstrap-static + fixtures → data/snapshots/gw{N}*.parquet  (--force, --history)
-  export.py          # snapshot → web/public/data/players.json + meta.json
+  export.py          # snapshot → web/public/data/players.json + meta.json + captain.json
+  captain.py         # capitán sugerido: FDR, filtro de titularidad, score, capitán/vice (puro)
   metrics/
     core.py          # funciones puras: ppm, per90, minutes_pct, team_games_finished, form
     percentiles.py   # umbral de minutos + percentil dentro de la posición (GKP/DEF/MID/FWD)
 tests/
   fixtures/          # JSON reales de la API subidos por el usuario (tests sin red)
-data/snapshots/      # gw{N}.parquet, gw{N}.fixtures.parquet, gw{N}.history.parquet (no se despliega)
+config/
+  captain.yml        # pesos (arbitrarios) y umbrales del capitán sugerido
+data/snapshots/      # gw{N}.parquet, gw{N}.{fixtures,events,history}.parquet (no se despliega)
 web/
   styles/theme.css   # ÚNICO sitio con colores (variables CSS)
-  app/               # page.tsx (tabla), compare/page.tsx (radar)
+  app/               # page.tsx (tabla), compare/page.tsx (radar), captain/page.tsx
   components/
   lib/
   public/data/       # players.json, meta.json (generados)
@@ -67,6 +70,18 @@ BACKLOG.md           # fases 2-4, no se implementan
 Percentiles: rango 0-100 **dentro de la posición**, solo entre jugadores con
 `minutes >= max(270, 0.25 * 90 * GW_jugadas)` (constantes en `metrics/percentiles.py`;
 `GW_jugadas` = eventos con `finished == true`). Se calculan en Python y se exportan ya hechos.
+
+### Capitán sugerido (`/captain`, `captain.json`)
+- GW objetivo = evento con `is_next`. Rival en las próximas `horizon_gws` (1-3) GW con la dificultad
+  oficial (`team_h_difficulty` / `team_a_difficulty`). DGW: `fdr` = suma de dificultades,
+  `ease` = Σ(5 - dificultad), se marca `dgw`. Blank en la GW objetivo → fuera.
+- Filtro de titularidad obligatorio: `status == "a"`, `chance_of_playing_next_round` null o ≥ umbral,
+  `% minutos` ≥ umbral. Los que no pasan van a `discarded` con motivo (lesión, duda, pocos minutos…).
+- Score = media ponderada de percentiles **dentro de los candidatos** de forma, xGI/90 y `ease`.
+  Pesos en `config/captain.yml`, iguales por defecto y **arbitrarios** (sin calibrar).
+- Capitán = #1; vice = siguiente que no comparte ningún partido de la GW objetivo.
+- Front: si la GW actual (según `meta.deadlines`) supera `meta.gw` en más de 1 → banner
+  "Datos desactualizados" y no se muestra el ranking.
 
 ### Front
 - Next.js (App Router) + TypeScript estricto + Recharts. `output: 'export'`, `images.unoptimized = true`,

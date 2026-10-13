@@ -81,6 +81,13 @@ def test_build_snapshot_from_real_bootstrap(bootstrap):
     assert df.schema["expected_goal_involvements"] == pl.Float64
     assert df.schema["form"] == pl.Float64
     assert df["gw"][0] == ingest.current_gw(bootstrap["events"])
+    assert df.schema["chance_of_playing_next_round"] == pl.Int32
+
+
+def test_build_fixtures_keeps_official_difficulty(fixtures_json):
+    fx = ingest.build_fixtures(fixtures_json)
+    for col in ["team_h_difficulty", "team_a_difficulty"]:
+        assert fx[col].drop_nulls().is_between(1, 5).all()
 
 
 def test_run_is_idempotent_without_force(tmp_path, fpl_transport, bootstrap):
@@ -88,6 +95,7 @@ def test_run_is_idempotent_without_force(tmp_path, fpl_transport, bootstrap):
     first = ingest.run(tmp_path, transport=fpl_transport)
     assert first == tmp_path / f"gw{gw}.parquet"
     assert (tmp_path / f"gw{gw}.fixtures.parquet").exists()
+    assert (tmp_path / f"gw{gw}.events.parquet").exists()
     mtime = first.stat().st_mtime_ns
 
     assert ingest.run(tmp_path, transport=fpl_transport) is None

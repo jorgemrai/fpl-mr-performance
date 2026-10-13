@@ -10,6 +10,7 @@ from pathlib import Path
 
 import polars as pl
 
+from pipeline import captain
 from pipeline.metrics import METRICS, add_metrics, add_percentiles, min_minutes
 from pipeline.metrics.core import form_last_n
 
@@ -65,7 +66,7 @@ def to_records(df: pl.DataFrame) -> list[dict]:
     return out
 
 
-def build_meta(players: pl.DataFrame, n: int, has_history: bool) -> dict:
+def build_meta(players: pl.DataFrame, n: int, has_history: bool, events: pl.DataFrame) -> dict:
     gws = int(players["gws_finished"][0])
     return {
         "gw": int(players["gw"][0]),
@@ -75,21 +76,38 @@ def build_meta(players: pl.DataFrame, n: int, has_history: bool) -> dict:
         "hasHistory": has_history,
         "dataFetchedAt": players["fetched_at"][0],
         "generatedAt": datetime.now(UTC).isoformat(timespec="seconds"),
+        # Para que el cliente sepa en qué GW está "hoy" y detecte datos desactualizados.
+        "deadlines": [{"gw": gw, "deadline": d} for gw, d in events.select("id", "deadline_time").rows()],
     }
+
+
+def target_gw(events: pl.DataFrame) -> tuple[int | None, str | None]:
+    """GW del próximo deadline y su fecha; (None, None) si la temporada ha terminado."""
+    nxt = events.filter(pl.col("is_next"))
+    if nxt.is_empty():
+        return None, None
+    return int(nxt["id"][0]), nxt["deadline_time"][0]
 
 
 def dumps(obj) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
 
 
-def run(snapshot_dir: Path = SNAPSHOT_DIR, out_dir: Path = OUT_DIR) -> tuple[Path, Path]:
+def run(
+    snapshot_dir: Path = SNAPSHOT_DIR, out_dir: Path = OUT_DIR, captain_config: Path = captain.CONFIG_PATH
+) -> tuple[Path, Path]:
     gw = latest_gw(snapshot_dir)
     players = pl.read_parquet(snapshot_dir / f"gw{gw}.parquet")
     fixtures = pl.read_parquet(snapshot_dir / f"gw{gw}.fixtures.parquet")
     hist_path = snapshot_dir / f"gw{gw}.history.parquet"
     history = pl.read_parquet(hist_path) if hist_path.exists() else None
+    events_path = snapshot_dir / f"gw{gw}.events.parquet"
+    if not events_path.exists():
+        raise SystemExit(f"Falta {events_path}: vuelve a ejecutar `make ingest FORCE=1`.")
+    events = pl.read_parquet(events_path)
 
-    records = to_records(build_table(players, fixtures, history))
+    table = build_table(players, fixtures, history)
+    records = to_records(table)
     payload = dumps(records)
     if len(payload.encode()) > MAX_BYTES:
         raise SystemExit(f"players.json ocupa {len(payload) / 1e6:.2f} MB (> 2 MB)")
@@ -97,8 +115,13 @@ def run(snapshot_dir: Path = SNAPSHOT_DIR, out_dir: Path = OUT_DIR) -> tuple[Pat
     out_dir.mkdir(parents=True, exist_ok=True)
     players_path, meta_path = out_dir / "players.json", out_dir / "meta.json"
     players_path.write_text(payload)
-    meta_path.write_text(dumps(build_meta(players, len(records), history is not None)))
+    meta_path.write_text(dumps(build_meta(players, len(records), history is not None, events)))
     print(f"GW{gw}: {len(records)} jugadores → {players_path} ({len(payload) / 1024:.0f} KB)")
+
+    next_gw, deadline = target_gw(events)
+    cap = captain.build_captain(table, fixtures, next_gw, deadline, captain.load_config(captain_config))
+    (out_dir / "captain.json").write_text(dumps(cap))
+    print(f"Capitán GW{next_gw}: {cap['candidates']} candidatos → {out_dir / 'captain.json'}")
     return players_path, meta_path
 
 
@@ -106,8 +129,9 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--snapshot-dir", type=Path, default=SNAPSHOT_DIR)
     ap.add_argument("--out-dir", type=Path, default=OUT_DIR)
+    ap.add_argument("--captain-config", type=Path, default=captain.CONFIG_PATH)
     args = ap.parse_args(argv)
-    run(args.snapshot_dir, args.out_dir)
+    run(args.snapshot_dir, args.out_dir, args.captain_config)
 
 
 if __name__ == "__main__":
