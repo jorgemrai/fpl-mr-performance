@@ -19,14 +19,14 @@ GitHub Actions (cron) ──> pipeline/ (Python) ──> web/public/data/*.json 
 
 ```
 pipeline/
-  ingest.py          # bootstrap-static + fixtures → data/snapshots/gw{N}.parquet (+ raw JSON)
+  ingest.py          # bootstrap-static + fixtures → data/snapshots/gw{N}*.parquet  (--force, --history)
   export.py          # snapshot → web/public/data/players.json + meta.json
   metrics/
-    core.py          # funciones puras: ppm, pts_per_90, xgi_per_90, minutes_pct, bps, form_3gw
-    percentiles.py   # percentil dentro de la posición (GKP/DEF/MID/FWD)
-  tests/
-    fixtures/        # JSON reales recortados de la API (tests sin red)
-data/snapshots/      # gw{N}.parquet (no se despliega)
+    core.py          # funciones puras: ppm, per90, minutes_pct, team_games_finished, form
+    percentiles.py   # umbral de minutos + percentil dentro de la posición (GKP/DEF/MID/FWD)
+tests/
+  fixtures/          # JSON reales de la API subidos por el usuario (tests sin red)
+data/snapshots/      # gw{N}.parquet, gw{N}.fixtures.parquet, gw{N}.history.parquet (no se despliega)
 web/
   styles/theme.css   # ÚNICO sitio con colores (variables CSS)
   app/               # page.tsx (tabla), compare/page.tsx (radar)
@@ -41,12 +41,13 @@ BACKLOG.md           # fases 2-4, no se implementan
 ## Convenciones
 
 ### Python
-- Python 3.12, gestionado con `uv` (`pyproject.toml` en la raíz, `uv.lock` versionado).
-- Polars para transformaciones; DuckDB solo si simplifica algo (consultas sobre Parquet). No pandas.
+- Python 3.12, gestionado con `uv` (`pyproject.toml` en la raíz, `uv.lock` versionado). HTTP con `httpx`.
+- Polars para transformaciones; DuckDB para exploración ad-hoc de snapshots (`make sql`). No pandas.
 - Métricas = **funciones puras** sobre `pl.Expr`/`pl.DataFrame`, sin I/O, cada una con test.
 - Red solo en `ingest.py`. Reintentos con backoff exponencial ante 429/5xx (503 incluido).
 - Idempotencia: si `gw{N}.parquet` existe, no se sobrescribe salvo `--force`.
-- `pytest` sin red: usa `pipeline/tests/fixtures/*.json`.
+- `pytest` sin red: usa los JSON **reales** de `tests/fixtures/` (no se inventan datos;
+  los unit tests de métricas usan DataFrames mínimos inline).
 - Divisiones por cero → `null`, nunca `inf`. Jugadores con < 90 min → métricas /90 `null`.
 
 ### Métricas (por jugador, temporada actual)
@@ -57,14 +58,20 @@ BACKLOG.md           # fases 2-4, no se implementan
 | `xgi90`      | `expected_goal_involvements / minutes * 90`                        |
 | `min_pct`    | `minutes / (90 * GWs jugadas por su equipo)`                       |
 | `bps`        | `bps` total de la temporada                                        |
-| `form3`      | media de puntos en las últimas 3 GW (desde snapshots/histórico)    |
+| `form`       | campo `form` de la FPL. Etiqueta en UI: **"Forma (30d)"**          |
 
-Percentiles: rango 0-100 **dentro de la posición**, solo entre jugadores con un mínimo de minutos
-(umbral en una constante). Se calculan en Python y se exportan ya hechos; el cliente solo pinta.
+- "GWs jugadas por su equipo" = fixtures con `finished == true` donde el equipo es local o visitante.
+- `--history` (off por defecto) descarga `element-summary/{id}` con concurrencia 6 y reintentos →
+  `gw{N}.history.parquet`. Si existe, export añade `form3` (media de las 3 últimas GW). No es eje del radar.
+
+Percentiles: rango 0-100 **dentro de la posición**, solo entre jugadores con
+`minutes >= max(270, 0.25 * 90 * GW_jugadas)` (constantes en `metrics/percentiles.py`;
+`GW_jugadas` = eventos con `finished == true`). Se calculan en Python y se exportan ya hechos.
 
 ### Front
-- Next.js (App Router) + TypeScript estricto + Recharts. `output: 'export'`, `basePath` = `/<repo>`
-  vía env `NEXT_PUBLIC_BASE_PATH` (vacío en local).
+- Next.js (App Router) + TypeScript estricto + Recharts. `output: 'export'`, `images.unoptimized = true`,
+  `basePath` = `/<repo>` vía env `NEXT_PUBLIC_BASE_PATH` (vacío en local).
+- Todo `fetch` de JSON pasa por `withBase()` (`web/lib/base.ts`). Nunca rutas absolutas a mano.
 - Estado de comparación en la URL: `/compare?ids=1,2,3` (2-4 ids). La URL es la fuente de verdad.
 - Sin librerías de estado, sin CSS-in-JS. CSS plano + variables.
 - `players.json` < 2 MB: claves cortas, números redondeados a 1-2 decimales.
@@ -83,18 +90,19 @@ Percentiles: rango 0-100 **dentro de la posición**, solo entre jugadores con un
 ### Proceso
 - Lo más simple que funcione. Nada fuera de alcance (optimizador, auth, import de equipo,
   DuckDB-WASM, AWS, BBDD externa) → `BACKLOG.md`.
-- Commits pequeños, uno por paso del plan. Mensajes en imperativo: `step N: ...`.
+- Commits pequeños, uno por paso del plan. Mensajes en imperativo: `Step N: ...`.
 - Antes de commitear: `make test` (pytest) y `npm run build` (front) en verde.
 
 ## Comandos
 
 ```
 make install   # uv sync + npm ci
-make ingest    # descarga GW actual → data/snapshots/   (FORCE=1 para sobrescribir)
+make ingest    # descarga GW actual → data/snapshots/   (FORCE=1 sobrescribe, HISTORY=1 element-summary)
 make export    # genera web/public/data/{players,meta}.json
 make test      # pytest
 make dev       # next dev en localhost:3000
 make build     # next build (export estático a web/out)
+make sql       # resumen de snapshots con DuckDB
 ```
 
 ## Plan (MVP)
@@ -105,7 +113,9 @@ make build     # next build (export estático a web/out)
 4. **Export** — `export.py` → `players.json` + `meta.json`; test de esquema y tamaño < 2 MB.
 5. **Front: tema + tabla** — Next.js export, `theme.css`, tabla filtrable (posición, precio, equipo) y ordenable, footer.
 6. **Front: /compare** — buscador de 2-4 jugadores, radar Recharts con percentiles, sincronizado con `?ids=`.
-7. **CI/CD** — `update.yml` (cron diario + dispatch: ingest + export + commit JSON) y `deploy.yml` (build + Pages, `basePath` = nombre del repo, solo `web/out`).
+7. **CI/CD** — `update.yml` (cron diario + dispatch, `permissions: contents: write`: ingest + export + commit)
+   que llama a `deploy.yml` vía `workflow_call` al terminar (un push con `GITHUB_TOKEN` no dispara otros
+   workflows). `deploy.yml` también corre en push a `main`; publica solo `web/out`.
 
 ## Notas del entorno
 - El sandbox de desarrollo de Claude no tiene salida a `fantasy.premierleague.com` (proxy 403).
