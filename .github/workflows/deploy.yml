@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  # Llamado por update.yml: un push con GITHUB_TOKEN no dispara otros workflows.
+  workflow_call:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Punta de la rama: incluye el commit de datos que acaba de hacer update.yml.
+          ref: ${{ github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: basePath = /<repo>
+        run: echo "NEXT_PUBLIC_BASE_PATH=/${GITHUB_REPOSITORY#*/}" >> "$GITHUB_ENV"
+
+      - name: Install & build
+        working-directory: web
+        run: |
+          npm ci
+          npm run build
+
+      - name: Check published files (solo JSON, sin Parquet)
+        run: |
+          test -f web/out/data/players.json || echo "::warning::falta players.json; ejecuta update.yml para publicar datos"
+          if find web/out -name '*.parquet' | grep -q .; then echo "::error::Parquet en web/out"; exit 1; fi
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
