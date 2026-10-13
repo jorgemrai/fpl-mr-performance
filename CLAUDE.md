@@ -1,4 +1,4 @@
-# CLAUDE.md — FPL Radar
+# CLAUDE.md — Mr FPL Performance
 
 App estática (GitHub Pages) que compara jugadores de la FPL con radares de percentiles.
 **Sin backend.** Proyecto no oficial, sin afiliación con la Premier League ni con Fantasy Premier League.

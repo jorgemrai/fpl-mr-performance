@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import CompareView from "@/components/CompareView";
 
-export const metadata = { title: "Comparar · FPL Radar" };
+export const metadata = { title: "Comparar · Mr FPL Performance" };
 
 export default function ComparePage() {
   return (

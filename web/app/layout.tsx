@@ -5,7 +5,7 @@ import "@/styles/app.css";
 import Footer from "@/components/Footer";
 
 export const metadata: Metadata = {
-  title: "FPL Radar",
+  title: "Mr FPL Performance",
   description: "Compara jugadores de la Fantasy Premier League con radares de percentiles por posición.",
 };
 
@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="site-header">
           <nav>
             <Link href="/" className="brand">
-              FPL <span>Radar</span>
+              Mr FPL <span>Performance</span>
             </Link>
             <Link href="/" className="nav-link">
               Jugadores

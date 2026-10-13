@@ -19,7 +19,7 @@ import polars as pl
 
 BASE_URL = "https://fantasy.premierleague.com/api"
 SNAPSHOT_DIR = Path("data/snapshots")
-HEADERS = {"User-Agent": "fpl-radar/0.1 (+https://github.com/jorgemrai/fpl-mr-performance)"}
+HEADERS = {"User-Agent": "mr-fpl-performance/0.1 (+https://github.com/jorgemrai/fpl-mr-performance)"}
 RETRY_STATUS = {429, 500, 502, 503, 504}
 MAX_ATTEMPTS = 5
 BACKOFF_S = 1.0
