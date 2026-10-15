@@ -1,0 +1,5 @@
+# Ejes del radar de /compare. Los lee export.py y los publica en meta.json.
+# Todos son percentiles dentro del grupo (posición, status != "u", minutos >= umbral).
+default_axes: [ppm, form, ict, defcon90, ease, own]
+optional_axes: [pts90, xgi90, min_pct, bps90, defcon_freq]
+max_axes: 8

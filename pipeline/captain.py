@@ -136,6 +136,8 @@ def pick_captain_vice(ranked: pl.DataFrame) -> tuple[int | None, int | None]:
 def rank(df: pl.DataFrame, fixtures: pl.DataFrame, target_gw: int, cfg: CaptainConfig):
     """→ (ranking de candidatos, descartados con motivo). `df` = tabla de export.build_table."""
     fdr = team_fdr(team_fixtures(fixtures, target_gw, cfg.horizon_gws), target_gw)
+    # La tabla ya trae su propio `ease` (rival próx. 3, promedio): el capitán usa el suyo (horizonte del yml).
+    df = df.drop([c for c in fdr.columns if c != "team" and c in df.columns])
     pool = df.join(fdr, on="team", how="left").with_columns(reason=discard_reason(cfg))
     candidates = pool.filter(pl.col("reason").is_null())
     discarded = pool.filter(pl.col("reason").is_not_null())
