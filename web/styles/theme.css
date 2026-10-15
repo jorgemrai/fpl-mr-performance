@@ -1,0 +1,44 @@
+/*
+ * ÚNICO archivo con valores de color. Los componentes usan solo var(--…).
+ * Paleta inspirada en premierleague.com (solo colores; sin logos ni fuentes propietarias).
+ *
+ * Contraste (WCAG 2.x):
+ *   white   / purple 17.1 · / purple-mid 11.9
+ *   green   / purple 12.7 · / purple-mid  8.9     purple / green 12.7 (botones)
+ *   cyan    / purple 12.6 · / purple-mid  8.8
+ *   muted   / purple  9.4 · / purple-mid  6.6
+ *   white   / pink    4.6  (alertas: texto blanco sobre rosa)
+ *   pink    / purple  3.7  → NO usar pink como color de texto.
+ */
+:root {
+  --pl-purple: #37003c;
+  --pl-purple-mid: #5a1a63;
+  --pl-green: #00ff85;
+  --pl-pink: #e90052;
+  --pl-cyan: #04f5ff;
+  --pl-white: #ffffff;
+
+  /* Semánticos (derivados de la paleta) */
+  --bg: var(--pl-purple);
+  --surface: var(--pl-purple-mid);
+  --text: var(--pl-white);
+  --text-muted: #cebad0; /* white 70% sobre purple-mid */
+  --accent: var(--pl-green);
+  --on-accent: var(--pl-purple);
+  --alert: var(--pl-pink);
+  --on-alert: var(--pl-white);
+  --link: var(--pl-cyan);
+  --border: rgb(255 255 255 / 0.18);
+  --grid: rgb(255 255 255 / 0.25);
+
+  /* Series del radar: 1 verde, 2 rosa, 3 cian, 4 blanco */
+  --series-1: var(--pl-green);
+  --series-2: var(--pl-pink);
+  --series-3: var(--pl-cyan);
+  --series-4: var(--pl-white);
+
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius: 8px;
+
+  color-scheme: dark;
+}

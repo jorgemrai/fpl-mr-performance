@@ -1,0 +1,23 @@
+# Capitán sugerido — configuración del ranking (lo lee pipeline/captain.py en `make export`).
+#
+# IMPORTANTE: los pesos son ARBITRARIOS. Empiezan iguales porque no hay ningún
+# backtesting que justifique otros; no están calibrados contra resultados reales.
+# Cambiarlos reordena el ranking sin tocar código.
+#
+# Cada factor se normaliza como percentil (0-100) dentro de los candidatos que
+# pasan el filtro de titularidad; el score es la media ponderada de esos percentiles.
+weights:
+  form: 1    # campo `form` de la FPL, "Forma (30d)"
+  xgi90: 1   # xGI por 90 minutos
+  ease: 1    # facilidad del rival: suma de (5 - dificultad) de sus partidos en el horizonte
+
+# Próximas GW a considerar para el rival (1-3). La primera es la del próximo deadline:
+# si el equipo no juega en ella (blank), el jugador queda fuera.
+horizon_gws: 1
+
+# Filtro de titularidad (obligatorio):
+min_minutes_pct: 60        # % de minutos jugados sobre los posibles de su equipo
+min_chance_of_playing: 75  # chance_of_playing_next_round null o >= este valor; status == "a"
+
+top_n: 5
+max_discarded: 15          # descartados listados (los de más puntos en la temporada)
