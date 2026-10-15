@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 import time
 from collections.abc import Callable
@@ -35,6 +36,7 @@ FLOAT_STR_FIELDS = [
     "expected_assists",
     "expected_goal_involvements",
     "expected_goals_conceded",
+    "ict_index",
 ]
 ELEMENT_FIELDS = [
     "id",
@@ -44,6 +46,8 @@ ELEMENT_FIELDS = [
     "team",
     "element_type",
     "status",
+    "news",
+    "chance_of_playing_this_round",
     "chance_of_playing_next_round",
     "now_cost",
     "total_points",
@@ -52,6 +56,9 @@ ELEMENT_FIELDS = [
     "assists",
     "clean_sheets",
     "bps",
+    "starts",
+    "defensive_contribution",
+    "defensive_contribution_per_90",
     *FLOAT_STR_FIELDS,
 ]
 FIXTURE_FIELDS = [
@@ -182,7 +189,9 @@ def build_snapshot(bootstrap: dict, fetched_at: datetime) -> pl.DataFrame:
     events = bootstrap["events"]
     return (
         elements.with_columns(pl.col(c).cast(pl.Float64, strict=False) for c in FLOAT_STR_FIELDS)
-        .with_columns(pl.col("chance_of_playing_next_round").cast(pl.Int32, strict=False))
+        .with_columns(
+            pl.col("chance_of_playing_this_round", "chance_of_playing_next_round").cast(pl.Int32, strict=False)
+        )
         .join(teams, on="team", how="left")
         .join(positions, on="element_type", how="left")
         .with_columns(
@@ -213,6 +222,21 @@ def build_events(events: list[dict]) -> pl.DataFrame:
         schema={"id": pl.Int32, "deadline_time": pl.String, "finished": pl.Boolean,
                 "is_current": pl.Boolean, "is_next": pl.Boolean},
     )
+
+
+def build_fixture_stats(fixtures: list[dict]) -> pl.DataFrame:
+    """Stats por (partido, jugador) de los partidos terminados: formato largo desde fixtures[].stats."""
+    rows = [
+        {"fixture": fx["id"], "event": fx["event"], "identifier": st["identifier"], "element": v["element"],
+         "value": v["value"]}
+        for fx in fixtures
+        if fx.get("finished")
+        for st in fx.get("stats") or []
+        for side in ("h", "a")
+        for v in st.get(side) or []
+    ]
+    schema = {"fixture": pl.Int64, "event": pl.Int32, "identifier": pl.String, "element": pl.Int64, "value": pl.Int64}
+    return pl.DataFrame(rows, schema=schema)
 
 
 def build_history(summaries: dict[int, dict]) -> pl.DataFrame:
@@ -251,6 +275,9 @@ def run(
     players.write_parquet(path)
     build_fixtures(fixtures).write_parquet(snapshot_path(out_dir, gw, "fixtures"))
     build_events(bootstrap["events"]).write_parquet(snapshot_path(out_dir, gw, "events"))
+    build_fixture_stats(fixtures).write_parquet(snapshot_path(out_dir, gw, "stats"))
+    # game_config: de aquí se intentan leer umbrales oficiales (p. ej. DefCon) antes que config/metrics.yml
+    (out_dir / f"gw{gw}.game_config.json").write_text(json.dumps(bootstrap.get("game_config") or {}))
     print(f"GW{gw}: {players.height} jugadores → {path}")
 
     if history:
