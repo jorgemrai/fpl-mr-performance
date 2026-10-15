@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { withBase } from "./base";
 
 export const METRICS = [
@@ -142,6 +142,32 @@ function useJson<T>(path: string): State<T> {
   return state;
 }
 
-export const usePlayers = () => useJson<Player[]>("/data/players.json");
+/** Defaults para JSON generados con un esquema anterior (hasta que update.yml los regenere). */
+function normalizePlayer(p: Partial<Player> & Pick<Player, "id" | "name">): Player {
+  return {
+    fullName: p.name,
+    team: "",
+    pos: "MID",
+    price: 0,
+    pts: 0,
+    min: 0,
+    status: "a",
+    news: null,
+    chance: null,
+    p: null,
+    n: 0,
+    ictRank: null,
+    defcon: null,
+    next: [],
+    ...p,
+    m: { ...(Object.fromEntries(METRICS.map((m) => [m, null])) as Record<Metric, number | null>), ...(p.m ?? {}) },
+  } as Player;
+}
+
+export function usePlayers(): State<Player[]> {
+  const { data, error } = useJson<Player[]>("/data/players.json");
+  const normalized = useMemo(() => data?.map(normalizePlayer) ?? null, [data]);
+  return { data: normalized, error };
+}
 export const useMeta = () => useJson<Meta>("/data/meta.json");
 export const useCaptain = () => useJson<Captain>("/data/captain.json");

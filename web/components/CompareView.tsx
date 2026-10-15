@@ -48,7 +48,12 @@ export default function CompareView() {
   const params = useSearchParams();
   const [q, setQ] = useState("");
 
-  const radarCfg = meta?.radar ?? { default: ["ppm", "form", "ict", "defcon90", "ease", "own"] as Metric[], optional: [] as Metric[], max: 8 };
+  // Fallback = config/radar.yml, por si meta.json es de un esquema anterior.
+  const radarCfg = meta?.radar ?? {
+    default: ["ppm", "form", "ict", "defcon90", "ease", "own"] as Metric[],
+    optional: ["pts90", "xgi90", "min_pct", "bps90", "defcon_freq"] as Metric[],
+    max: 8,
+  };
   const allowedAxes = useMemo(
     () => [...radarCfg.default, ...radarCfg.optional].filter((m) => METRICS.includes(m)),
     [radarCfg.default, radarCfg.optional],
