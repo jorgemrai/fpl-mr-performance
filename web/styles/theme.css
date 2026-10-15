@@ -37,6 +37,23 @@
   --series-3: var(--pl-cyan);
   --series-4: var(--pl-white);
 
+  /* Dificultad del rival: 1 fácil → 5 difícil */
+  --fdr-1: var(--pl-green);
+  --fdr-2: #8affc1;
+  --fdr-3: #ded1e0;
+  --fdr-4: var(--pl-pink);
+  --fdr-5: #8c0032;
+  --on-fdr-light: var(--pl-purple);
+  --on-fdr-dark: var(--pl-white);
+
+  /* Estado (status FPL) */
+  --status-d: var(--pl-cyan);
+  --status-i: var(--pl-pink);
+  --status-s: #8c0032;
+  --status-u: #cebad0;
+  --on-status-light: var(--pl-purple);
+  --on-status-dark: var(--pl-white);
+
   --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius: 8px;
 

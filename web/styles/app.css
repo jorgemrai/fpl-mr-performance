@@ -67,8 +67,8 @@ thead th button:hover { color: var(--accent); }
 td { padding: 8px 12px; white-space: nowrap; }
 td.num, th.num { text-align: right; }
 tbody tr:nth-child(even) { background: var(--surface); }
-tbody tr td:first-child { border-left: 4px solid transparent; }
-tbody tr:hover td:first-child { border-left-color: var(--accent); }
+tbody tr td:first-child { box-shadow: inset 4px 0 0 transparent; }
+tbody tr:hover td:first-child { box-shadow: inset 4px 0 0 var(--accent); }
 tbody tr:hover { outline: 1px solid var(--border); }
 td.sel { width: 1%; }
 
@@ -115,3 +115,47 @@ td.sel { width: 1%; }
 .pick-stats dd { margin: 0 0 0 auto; text-align: right; font-variant-numeric: tabular-nums; }
 .pick-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: auto 0 0; }
 .pick-foot a, .pick-foot span { white-space: nowrap; }
+
+/* Tabla: columna de nombre fija */
+.players th.sticky, .players td.sticky { position: sticky; left: 0; z-index: 1; }
+.players thead th.sticky { z-index: 3; }
+.players tbody tr td.sticky { background: var(--bg); }
+.players tbody tr:nth-child(even) td.sticky { background: var(--surface); }
+.players thead th { z-index: 2; }
+.name-cell { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-muted); padding-bottom: 6px; }
+
+/* Estado */
+.status { display: inline-block; font-size: 0.75rem; font-weight: 700; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.status-a { color: var(--text-muted); border: 1px solid var(--border); }
+.status-d { background: var(--status-d); color: var(--on-status-light); }
+.status-i { background: var(--status-i); color: var(--on-status-dark); }
+.status-s { background: var(--status-s); color: var(--on-status-dark); }
+.status-u, .status-n { background: var(--status-u); color: var(--on-status-light); }
+
+/* Rival por dificultad */
+.rivals { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.fdr { display: inline-flex; align-items: baseline; gap: 2px; font-size: 0.75rem; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+.fdr small { font-weight: 600; font-size: 0.65rem; }
+.fdr-1 { background: var(--fdr-1); color: var(--on-fdr-light); }
+.fdr-2 { background: var(--fdr-2); color: var(--on-fdr-light); }
+.fdr-3 { background: var(--fdr-3); color: var(--on-fdr-light); }
+.fdr-4 { background: var(--fdr-4); color: var(--on-fdr-dark); }
+.fdr-5 { background: var(--fdr-5); color: var(--on-fdr-dark); }
+
+/* Selector de ejes del radar */
+.axes { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px 12px; margin: 0 0 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+.axes legend { color: var(--text-muted); font-size: 0.85rem; padding: 0 4px; }
+.axis-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); cursor: pointer; }
+.axis-toggle.on { border-color: var(--accent); }
+.axis-toggle:has(input:disabled) { opacity: 0.6; cursor: not-allowed; }
+.warn { border-left: 4px solid var(--alert); padding: 4px 10px; background: var(--bg); }
+
+/* Capitán: transparencia del filtro */
+.filter-rules { margin: 0 0 12px; padding-left: 20px; }
+.reason-counts { list-style: none; padding: 0; margin: 0 0 16px; display: flex; flex-wrap: wrap; gap: 8px; }
+.reason-counts li { background: var(--surface); border-radius: 999px; padding: 4px 12px; font-size: 0.9rem; }
+.discards { margin: 8px 0; }
+.discards summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+.compare-grid td { white-space: normal; }
+.players .rivals { flex-wrap: nowrap; }
