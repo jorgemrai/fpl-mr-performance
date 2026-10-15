@@ -23,13 +23,18 @@ pipeline/
   export.py          # snapshot → web/public/data/players.json + meta.json + captain.json
   captain.py         # capitán sugerido: FDR, filtro de titularidad, score, capitán/vice (puro)
   metrics/
-    core.py          # funciones puras: ppm, per90, minutes_pct, team_games_finished, form
-    percentiles.py   # umbral de minutos + percentil dentro de la posición (GKP/DEF/MID/FWD)
+    core.py          # funciones puras: ppm, per90, minutes_pct, defcon90, availability_chance…
+    defcon.py        # umbral DefCon (game_config → config/metrics.yml) y frecuencia DefCon
+    fixtures.py      # facilidad del rival en las próximas 3 GW
+    ownership.py     # Δ ownership vs snapshot anterior
+    percentiles.py   # grupo (posición, status != "u", minutos ≥ umbral), percentil, n, ICT rank
 tests/
   fixtures/          # JSON reales de la API subidos por el usuario (tests sin red)
 config/
   captain.yml        # pesos (arbitrarios) y umbrales del capitán sugerido
-data/snapshots/      # gw{N}.parquet, gw{N}.{fixtures,events,history}.parquet (no se despliega)
+  metrics.yml        # umbral DefCon por posición si game_config no lo trae
+  radar.yml          # ejes por defecto / opcionales / máximo del radar
+data/snapshots/      # gw{N}.parquet, gw{N}.{fixtures,events,stats,history}.parquet, gw{N}.game_config.json
 web/
   styles/theme.css   # ÚNICO sitio con colores (variables CSS)
   app/               # page.tsx (tabla), compare/page.tsx (radar), captain/page.tsx
@@ -60,34 +65,43 @@ BACKLOG.md           # fases 2-4, no se implementan
 | `pts90`      | `total_points / minutes * 90`                                      |
 | `xgi90`      | `expected_goal_involvements / minutes * 90`                        |
 | `min_pct`    | `minutes / (90 * GWs jugadas por su equipo)`                       |
-| `bps`        | `bps` total de la temporada                                        |
+| `bps90`      | `bps / minutes * 90` (sustituye al BPS acumulado)                  |
 | `form`       | campo `form` de la FPL. Etiqueta en UI: **"Forma (30d)"**          |
+| `ict`        | `ict_index`; en tabla se muestra el puesto dentro del grupo ("#12 de 91"), no el ranking de la API |
+| `defcon90`   | `defensive_contribution / minutes * 90` (== `defensive_contribution_per_90`). Portero: null |
+| `defcon_freq`| partidos con DefCon ≥ umbral (fixtures[].stats) / `starts`, tope 100%. Portero: null. Aproximación: un suplente que cruza el umbral suma arriba y no abajo |
+| `ease`       | promedio de (5 - dificultad oficial) de sus partidos en las próximas 3 GW; blank no cuenta |
+| `own`        | `selected_by_percent`; Δ en p.p. vs el snapshot anterior solo si existe |
 
 - "GWs jugadas por su equipo" = fixtures con `finished == true` donde el equipo es local o visitante.
 - `--history` (off por defecto) descarga `element-summary/{id}` con concurrencia 6 y reintentos →
   `gw{N}.history.parquet`. Si existe, export añade `form3` (media de las 3 últimas GW). No es eje del radar.
 
-Percentiles: rango 0-100 **dentro de la posición**, solo entre jugadores con
+Percentiles: rango 0-100 **dentro del grupo** = misma posición, `status != "u"` y
 `minutes >= max(270, 0.25 * 90 * GW_jugadas)` (constantes en `metrics/percentiles.py`;
-`GW_jugadas` = eventos con `finished == true`). Se calculan en Python y se exportan ya hechos.
+`GW_jugadas` = eventos con `finished == true`). Se exporta `n` (tamaño del grupo); si n < 30 el
+front avisa "grupo pequeño: percentiles aproximados". Se calculan en Python y se exportan ya hechos.
+Estado: `chance` = `chance_of_playing_next_round` si hay evento `is_next`, si no `this_round`; null = sin alerta.
 
 ### Capitán sugerido (`/captain`, `captain.json`)
 - GW objetivo = evento con `is_next`. Rival en las próximas `horizon_gws` (1-3) GW con la dificultad
   oficial (`team_h_difficulty` / `team_a_difficulty`). DGW: `fdr` = suma de dificultades,
   `ease` = Σ(5 - dificultad), se marca `dgw`. Blank en la GW objetivo → fuera.
-- Filtro de titularidad obligatorio: `status == "a"`, `chance_of_playing_next_round` null o ≥ umbral,
-  `% minutos` ≥ umbral. Los que no pasan van a `discarded` con motivo (lesión, duda, pocos minutos…).
+- Filtro de titularidad obligatorio: no portero, `status == "a"`, `chance_of_playing_next_round` null o ≥ umbral,
+  `% minutos` ≥ umbral. Todos los que no pasan van a `discarded` con motivo (portero, lesión, duda,
+  sanción, no disponible, pocos minutos, sin partido) y `discardedByReason` suma exactamente los excluidos.
 - Score = media ponderada de percentiles **dentro de los candidatos** de forma, xGI/90 y `ease`.
   Pesos en `config/captain.yml`, iguales por defecto y **arbitrarios** (sin calibrar).
 - Capitán = #1; vice = siguiente que no comparte ningún partido de la GW objetivo.
 - Front: si la GW actual (según `meta.deadlines`) supera `meta.gw` en más de 1 → banner
-  "Datos desactualizados" y no se muestra el ranking.
+  "Datos desactualizados" y no se muestra el ranking. Deadline en hora de Ecuador (UTC-5).
 
 ### Front
 - Next.js (App Router) + TypeScript estricto + Recharts. `output: 'export'`, `images.unoptimized = true`,
   `basePath` = `/<repo>` vía env `NEXT_PUBLIC_BASE_PATH` (vacío en local).
 - Todo `fetch` de JSON pasa por `withBase()` (`web/lib/base.ts`). Nunca rutas absolutas a mano.
-- Estado de comparación en la URL: `/compare?ids=1,2,3` (2-4 ids). La URL es la fuente de verdad.
+- Estado de comparación en la URL: `/compare?ids=1,2,3&axes=ppm,form,…` (2-4 ids, 3-8 ejes de
+  `config/radar.yml`). La URL es la fuente de verdad. Con un portero se ocultan los ejes DefCon con aviso.
 - Sin librerías de estado, sin CSS-in-JS. CSS plano + variables.
 - `players.json` < 2 MB: claves cortas, números redondeados a 1-2 decimales.
 
