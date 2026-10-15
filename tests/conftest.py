@@ -3,6 +3,9 @@
 - bootstrap-static.json   (GET /api/bootstrap-static/)
 - fixtures.json           (GET /api/fixtures/)
 - element-summary-*.json  (opcional, GET /api/element-summary/{id}/)
+- fixtures_blank_gw8.json copia de fixtures.json editada a mano: el partido 72 (AVL-MCI, GW8)
+                          pasa a event=null (aplazado) → blank de MCI y AVL en la GW8.
+- gw05/bootstrap-static.json (opcional) bootstrap de la GW5 para el Δ de ownership.
 
 Se puede apuntar a otro directorio con FPL_FIXTURES_DIR.
 """
@@ -32,6 +35,16 @@ def bootstrap() -> dict:
 @pytest.fixture(scope="session")
 def fixtures_json() -> list:
     return _load("fixtures.json")
+
+
+@pytest.fixture(scope="session")
+def fixtures_blank_json() -> list:
+    return _load("fixtures_blank_gw8.json")
+
+
+@pytest.fixture(scope="session")
+def bootstrap_gw05() -> dict:
+    return _load("gw05/bootstrap-static.json")
 
 
 @pytest.fixture

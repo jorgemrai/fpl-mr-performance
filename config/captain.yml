@@ -15,9 +15,8 @@ weights:
 # si el equipo no juega en ella (blank), el jugador queda fuera.
 horizon_gws: 1
 
-# Filtro de titularidad (obligatorio):
+# Filtro de titularidad (obligatorio). Los porteros nunca son candidatos.
 min_minutes_pct: 60        # % de minutos jugados sobre los posibles de su equipo
 min_chance_of_playing: 75  # chance_of_playing_next_round null o >= este valor; status == "a"
 
 top_n: 5
-max_discarded: 15          # descartados listados (los de más puntos en la temporada)

@@ -16,6 +16,8 @@ FACTORS = ["form", "xgi90", "ease"]
 MAX_DIFFICULTY = 5  # FDR oficial va de 1 (fácil) a 5 (difícil)
 
 STATUS_REASONS = {"d": "duda", "i": "lesión", "s": "sanción", "u": "no disponible", "n": "no disponible"}
+EXCLUDED_POSITIONS = {"GKP"}  # el capitán nunca es portero: fuera de candidatos y de sus percentiles
+REASONS = ["portero", "lesión", "duda", "sanción", "no disponible", "pocos minutos", "sin partido"]
 
 
 @dataclass(frozen=True)
@@ -25,7 +27,6 @@ class CaptainConfig:
     min_minutes_pct: float = 60.0
     min_chance_of_playing: int = 75
     top_n: int = 5
-    max_discarded: int = 15
 
 
 def load_config(path: Path = CONFIG_PATH) -> CaptainConfig:
@@ -86,18 +87,37 @@ def team_fdr(tf: pl.DataFrame, target_gw: int) -> pl.DataFrame:
 
 
 def discard_reason(cfg: CaptainConfig) -> pl.Expr:
-    """Motivo de descarte (null = pasa el filtro). Orden: estado, probabilidad, minutos, blank."""
+    """Motivo de descarte, uno de REASONS (null = pasa el filtro).
+
+    Orden: portero, estado, probabilidad de jugar, minutos, sin partido. Cuenta el primero que aplica.
+    """
     chance = pl.col("chance_of_playing_next_round")
-    expr = pl.when(pl.col("status") != "a").then(
-        pl.col("status").replace_strict(STATUS_REASONS, default="no disponible")
-    )
     return (
-        expr.when(chance.is_not_null() & (chance < cfg.min_chance_of_playing))
-        .then(pl.format("duda ({}%)", chance))
+        pl.when(pl.col("position").is_in(EXCLUDED_POSITIONS))
+        .then(pl.lit("portero"))
+        .when(pl.col("status") != "a")
+        .then(pl.col("status").replace_strict(STATUS_REASONS, default="no disponible"))
+        .when(chance.is_not_null() & (chance < cfg.min_chance_of_playing))
+        .then(pl.lit("duda"))
         .when(pl.col("min_pct").fill_null(0) < cfg.min_minutes_pct)
         .then(pl.lit("pocos minutos"))
         .when(pl.col("fdr").is_null())
-        .then(pl.lit("sin partido (blank)"))
+        .then(pl.lit("sin partido"))
+        .otherwise(None)
+    )
+
+
+def discard_detail() -> pl.Expr:
+    """Contexto del motivo: news de la FPL, % de probabilidad o % de minutos."""
+    chance = pl.col("chance_of_playing_next_round")
+    news = pl.col("news").fill_null("")
+    return (
+        pl.when(pl.col("reason").is_in(["lesión", "duda", "sanción", "no disponible"]) & (news != ""))
+        .then(news)
+        .when(pl.col("reason") == "duda")
+        .then(pl.format("{}% de jugar", chance))
+        .when(pl.col("reason") == "pocos minutos")
+        .then(pl.format("{}% de minutos", pl.col("min_pct").fill_null(0).round(0).cast(pl.Int32)))
         .otherwise(None)
     )
 
@@ -136,7 +156,11 @@ def pick_captain_vice(ranked: pl.DataFrame) -> tuple[int | None, int | None]:
 def rank(df: pl.DataFrame, fixtures: pl.DataFrame, target_gw: int, cfg: CaptainConfig):
     """→ (ranking de candidatos, descartados con motivo). `df` = tabla de export.build_table."""
     fdr = team_fdr(team_fixtures(fixtures, target_gw, cfg.horizon_gws), target_gw)
-    pool = df.join(fdr, on="team", how="left").with_columns(reason=discard_reason(cfg))
+    # La tabla ya trae su propio `ease` (rival próx. 3, promedio): el capitán usa el suyo (horizonte del yml).
+    df = df.drop([c for c in fdr.columns if c != "team" and c in df.columns])
+    pool = df.join(fdr, on="team", how="left").with_columns(reason=discard_reason(cfg)).with_columns(
+        reason_detail=discard_detail()
+    )
     candidates = pool.filter(pl.col("reason").is_null())
     discarded = pool.filter(pl.col("reason").is_not_null())
     return score(candidates, cfg.weights), discarded
@@ -158,7 +182,7 @@ def build_captain(
         "minChanceOfPlaying": cfg.min_chance_of_playing,
     }
     if target_gw is None:
-        return base | {"candidates": 0, "top": [], "discarded": []}
+        return base | {"candidates": 0, "top": [], "discarded": [], "discardedByReason": {}}
 
     ranked, discarded = rank(df, fixtures, target_gw, cfg)
     cap, vice = pick_captain_vice(ranked)
@@ -193,10 +217,26 @@ def build_captain(
         )
     top.sort(key=lambda x: x["rank"])
 
+    # Todos los descartados con su motivo (los de más puntos primero) y el conteo por motivo,
+    # que suma exactamente el total de excluidos.
     dropped = [
-        {"id": r["id"], "name": r["web_name"], "team": r["team_short"], "pos": r["position"], "reason": r["reason"]}
-        for r in discarded.sort(["total_points", "id"], descending=[True, False])
-        .head(cfg.max_discarded)
-        .iter_rows(named=True)
+        {
+            "id": r["id"],
+            "name": r["web_name"],
+            "team": r["team_short"],
+            "pos": r["position"],
+            "pts": r["total_points"],
+            "reason": r["reason"],
+            "detail": r["reason_detail"],
+        }
+        for r in discarded.sort(["total_points", "id"], descending=[True, False]).iter_rows(named=True)
     ]
-    return base | {"candidates": ranked.height, "top": top, "discarded": dropped}
+    counts = dict(discarded.group_by("reason").len().iter_rows())
+    by_reason = {k: counts.get(k, 0) for k in REASONS} | {k: v for k, v in counts.items() if k not in REASONS}
+    return base | {
+        "candidates": ranked.height,
+        "top": top,
+        "discarded": dropped,
+        "discardedByReason": by_reason,
+        "excluded": discarded.height,
+    }

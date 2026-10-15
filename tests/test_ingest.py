@@ -96,9 +96,35 @@ def test_run_is_idempotent_without_force(tmp_path, fpl_transport, bootstrap):
     assert first == tmp_path / f"gw{gw}.parquet"
     assert (tmp_path / f"gw{gw}.fixtures.parquet").exists()
     assert (tmp_path / f"gw{gw}.events.parquet").exists()
+    assert (tmp_path / f"gw{gw}.stats.parquet").exists()
+    assert (tmp_path / f"gw{gw}.game_config.json").exists()
     mtime = first.stat().st_mtime_ns
 
     assert ingest.run(tmp_path, transport=fpl_transport) is None
     assert first.stat().st_mtime_ns == mtime
 
     assert ingest.run(tmp_path, force=True, transport=fpl_transport) == first
+
+
+def test_fixture_stats_long_format_only_finished(fixtures_json):
+    stats = ingest.build_fixture_stats(fixtures_json)
+    finished = {fx["id"] for fx in fixtures_json if fx["finished"]}
+    assert set(stats["fixture"].unique()) <= finished
+    assert "defensive_contribution" in set(stats["identifier"])
+
+
+def test_defcon_per_match_sums_to_bootstrap_total(bootstrap, fixtures_json):
+    """Consistencia: Σ defensive_contribution por partido (fixtures) == total de bootstrap-static."""
+    per_match = (
+        ingest.build_fixture_stats(fixtures_json)
+        .filter(pl.col("identifier") == "defensive_contribution")
+        .group_by("element")
+        .agg(pl.col("value").sum())
+    )
+    totals = pl.DataFrame(
+        [{"element": e["id"], "total": e["defensive_contribution"]} for e in bootstrap["elements"]]
+    )
+    diff = totals.join(per_match, on="element", how="left").with_columns(pl.col("value").fill_null(0)).filter(
+        pl.col("total") != pl.col("value")
+    )
+    assert diff.is_empty(), f"diferencias DefCon fixtures vs bootstrap:\n{diff}"

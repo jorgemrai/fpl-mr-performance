@@ -1,0 +1,10 @@
+# Umbrales de métricas que la API no publica.
+#
+# DefCon: acciones defensivas por partido necesarias para sumar los puntos de
+# defensive_contribution. Se intenta leer primero de game_config (gw{N}.game_config.json);
+# a día de GW6 2026-27 la API solo publica los PUNTOS (game_config.scoring), no el umbral,
+# así que se usan estos valores. Portero: no aplica (métricas DefCon = null).
+defcon_threshold:
+  DEF: 10
+  MID: 12
+  FWD: 12

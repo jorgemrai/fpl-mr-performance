@@ -10,17 +10,17 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-import { METRIC_LABELS, METRICS, type Player } from "@/lib/data";
+import { METRIC_LABELS, type Metric, type Player } from "@/lib/data";
 import { SERIES, useCssVars } from "@/lib/theme";
 
 const VARS = [...SERIES, "text", "text-muted", "grid", "bg", "border"] as const;
 
-export default function PlayerRadar({ players }: { players: Player[] }) {
+export default function PlayerRadar({ players, axes }: { players: Player[]; axes: Metric[] }) {
   const c = useCssVars(VARS);
   if (!c) return <div className="radar-box" />;
 
-  // Una fila por eje; una columna por jugador (percentil dentro de su posición).
-  const data = METRICS.map((m) => ({
+  // Una fila por eje; una columna por jugador (percentil dentro del grupo de su posición).
+  const data = axes.map((m) => ({
     axis: METRIC_LABELS[m],
     ...Object.fromEntries(players.map((p) => [String(p.id), p.p?.[m] ?? 0])),
   }));
@@ -35,7 +35,7 @@ export default function PlayerRadar({ players }: { players: Player[] }) {
           {players.map((p, i) => (
             <Radar
               key={p.id}
-              name={`${p.name} (${p.pos})`}
+              name={`${p.name} (${p.pos}, n=${p.n})`}
               dataKey={String(p.id)}
               stroke={c[SERIES[i]]}
               fill={c[SERIES[i]]}

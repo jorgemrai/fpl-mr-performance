@@ -5,6 +5,26 @@ import { useCaptain, useMeta, type CaptainFixture, type CaptainPick } from "@/li
 import { fmtPrice } from "@/lib/format";
 import { isStale } from "@/lib/staleness";
 
+const REASON_LABELS: Record<string, string> = {
+  portero: "Portero",
+  "lesión": "Lesión",
+  duda: "Duda",
+  "sanción": "Sanción",
+  "no disponible": "No disponible",
+  "pocos minutos": "Pocos minutos",
+  "sin partido": "Sin partido",
+};
+
+/** Deadline en hora de Ecuador (UTC-5, sin horario de verano). */
+export function fmtDeadlineEcuador(iso: string): string {
+  const s = new Date(iso).toLocaleString("es-EC", {
+    timeZone: "America/Guayaquil",
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  return `${s} (hora Ecuador, UTC-5)`;
+}
+
 const fmtFixture = (f: CaptainFixture) => `${f.opp} (${f.home ? "L" : "V"}) ${f.difficulty}`;
 const fmtNum = (v: number | null, nd: number) => (v === null ? "–" : v.toFixed(nd));
 
@@ -81,9 +101,8 @@ export default function CaptainView() {
 
   const captainPick = cap.top.find((p) => p.role === "C")!;
   const vicePick = cap.top.find((p) => p.role === "V");
-  const deadline = cap.deadline
-    ? new Date(cap.deadline).toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" })
-    : null;
+  const deadline = cap.deadline ? fmtDeadlineEcuador(cap.deadline) : null;
+  const reasons = Object.entries(cap.discardedByReason ?? {}).filter(([, n]) => n > 0);
 
   return (
     <>
@@ -108,34 +127,63 @@ export default function CaptainView() {
         ))}
       </div>
 
-      <h2>Descartados</h2>
-      <p className="muted small">
-        Filtro de titularidad: estado disponible, probabilidad de jugar ≥ {cap.minChanceOfPlaying}% (o sin aviso) y ≥{" "}
-        {cap.minMinutesPct}% de los minutos posibles. Se listan los {cap.discarded.length} con más puntos.
+      <h2>Filtro de titularidad</h2>
+      <ul className="filter-rules">
+        <li>
+          Umbral de minutos: <strong>≥ {cap.minMinutesPct}%</strong> de los minutos posibles de su equipo.
+        </li>
+        <li>
+          Probabilidad de jugar: <strong>≥ {cap.minChanceOfPlaying}%</strong> o sin aviso, y estado disponible.
+        </li>
+        <li>Porteros excluidos: no entran en el ranking ni en sus percentiles.</li>
+        <li>Sin partido en la GW {cap.gw}: fuera.</li>
+      </ul>
+      <p>
+        <strong>{cap.candidates}</strong> candidatos · <strong>{cap.excluded}</strong> descartados:
       </p>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              {["Jugador", "Equipo", "Pos", "Motivo"].map((h) => (
-                <th key={h}>
-                  <span className="th-label">{h}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {cap.discarded.map((d) => (
-              <tr key={d.id}>
-                <td>{d.name}</td>
-                <td>{d.team}</td>
-                <td>{d.pos}</td>
-                <td>{d.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ul className="reason-counts">
+        {Object.entries(cap.discardedByReason ?? {}).map(([r, n]) => (
+          <li key={r} className={n === 0 ? "muted" : undefined}>
+            {REASON_LABELS[r] ?? r} <strong>{n}</strong>
+          </li>
+        ))}
+      </ul>
+      {reasons.map(([reason, n]) => (
+        <details key={reason} className="discards">
+          <summary>
+            {REASON_LABELS[reason] ?? reason} ({n})
+          </summary>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  {["Jugador", "Equipo", "Pos", "Pts", "Motivo"].map((h) => (
+                    <th key={h}>
+                      <span className="th-label">{h}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {cap.discarded
+                  .filter((d) => d.reason === reason)
+                  .map((d) => (
+                    <tr key={d.id}>
+                      <td>{d.name}</td>
+                      <td>{d.team}</td>
+                      <td>{d.pos}</td>
+                      <td>{d.pts}</td>
+                      <td>
+                        {REASON_LABELS[d.reason] ?? d.reason}
+                        {d.detail && <span className="muted small"> · {d.detail}</span>}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      ))}
 
       <p className="muted small">
         Score = media ponderada de percentiles dentro de los candidatos (forma {cap.weights.form} · xGI/90{" "}

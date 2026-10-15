@@ -68,10 +68,13 @@ def test_percentile_null_metric_stays_null():
 
 
 def test_pipeline_on_real_data(bootstrap, fixtures_json):
+    from pipeline import export
+
     players = ingest.build_snapshot(bootstrap, datetime.now(UTC))
     fixtures = ingest.build_fixtures(fixtures_json)
-    gws = ingest.gws_finished(bootstrap["events"])
-    df = add_percentiles(add_metrics(players, fixtures), METRICS, gws)
+    df = export.build_table(
+        players, fixtures, stats=ingest.build_fixture_stats(fixtures_json), next_gw=ingest.next_gw(bootstrap["events"])
+    ).with_columns(pl.col("min_pct", "defcon_freq") / 100)
 
     for m in METRICS:
         p = df[f"p_{m}"].drop_nulls()

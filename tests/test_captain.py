@@ -71,7 +71,9 @@ def test_low_chance_of_playing_is_discarded_as_doubt(real, cfg):
     after = captain.build_captain(doubt, fixtures, gw, None, cfg)
     assert top_id not in {t["id"] for t in after["top"]}
     ranked, discarded = captain.rank(doubt, fixtures, gw, cfg)
-    assert discarded.filter(pl.col("id") == top_id)["reason"][0] == "duda (50%)"
+    row = discarded.filter(pl.col("id") == top_id).row(0, named=True)
+    assert row["reason"] == "duda"
+    assert row["reason_detail"] == "50% de jugar" or row["news"]
 
 
 # ------------------------------------------------------------------- DGW / blank
@@ -110,8 +112,12 @@ def test_blank_gameweek_player_never_appears(real, cfg):
     out = captain.build_captain(table, blank, gw, None, cfg)
     team_ids = set(table.filter(pl.col("team") == team)["id"])
     assert not {t["id"] for t in out["top"]} & team_ids
-    available = discarded.filter((pl.col("team") == team) & (pl.col("status") == "a") & (pl.col("min_pct") >= cfg.min_minutes_pct))
-    assert set(available["reason"]) <= {"sin partido (blank)", "duda (25%)", "duda (50%)", "duda (0%)"}
+    available = discarded.filter(
+        (pl.col("team") == team) & (pl.col("status") == "a") & (pl.col("min_pct") >= cfg.min_minutes_pct)
+        & (pl.col("position") != "GKP")
+    )
+    assert set(available["reason"]) <= {"sin partido", "duda"}
+    assert "sin partido" in set(available["reason"])
 
 
 # ------------------------------------------------------------------------ vice
@@ -176,3 +182,26 @@ def test_invalid_weights_rejected(tmp_path, weights):
 def test_season_over_returns_empty_ranking(cfg):
     out = captain.build_captain(pl.DataFrame(), pl.DataFrame(), None, None, cfg)
     assert out["top"] == [] and out["gw"] is None
+
+
+# -------------------------------------------------------------------- porteros / transparencia
+
+
+def test_no_goalkeeper_in_top5_nor_in_candidates(real, cfg):
+    table, fixtures, gw = real
+    ranked, discarded = captain.rank(table, fixtures, gw, cfg)
+    assert ranked.filter(pl.col("position") == "GKP").is_empty()  # tampoco entran en los percentiles
+    gks = table.filter(pl.col("position") == "GKP")
+    assert set(discarded.filter(pl.col("reason") == "portero")["id"]) == set(gks["id"])
+    out = captain.build_captain(table, fixtures, gw, None, cfg)
+    assert all(t["pos"] != "GKP" for t in out["top"])
+
+
+def test_discard_counts_sum_exactly_the_excluded(real, cfg):
+    table, fixtures, gw = real
+    out = captain.build_captain(table, fixtures, gw, None, cfg)
+    assert sum(out["discardedByReason"].values()) == out["excluded"] == len(out["discarded"])
+    assert out["excluded"] + out["candidates"] == table.height
+    assert all(d["reason"] in captain.REASONS for d in out["discarded"])
+    for reason, n in out["discardedByReason"].items():
+        assert n == sum(d["reason"] == reason for d in out["discarded"])
