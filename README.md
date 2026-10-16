@@ -32,6 +32,8 @@ Flags de ingesta: `make ingest FORCE=1` (sobrescribe el snapshot de la GW) y
 Solo se publica `web/out` (HTML + JSON). Los snapshots Parquet se quedan en el repo.
 El `basePath` se calcula a partir del nombre del repo (`/<repo>`).
 
+¿Quieres aportar? Lee [CONTRIBUTING.md](CONTRIBUTING.md).
+
 Más detalle de convenciones y arquitectura en [CLAUDE.md](CLAUDE.md). Siguientes fases en [BACKLOG.md](BACKLOG.md).
 
 ---
