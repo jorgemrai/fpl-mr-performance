@@ -37,12 +37,14 @@ jobs:
       - name: Tests
         run: uv run pytest -q
 
+      # El cron SIEMPRE usa --force (en schedule `inputs` viene vacío y, en las expresiones de
+      # GitHub, null != false es falso: por eso antes no sobrescribía).
       # El cron refresca a diario: sobrescribe el snapshot de la GW en curso
       # (gw{N}.parquet queda como el último estado conocido de esa GW).
       - name: Ingest
         run: >
           uv run python -m pipeline.ingest
-          ${{ inputs.force != false && '--force' || '' }}
+          ${{ (github.event_name == 'schedule' || inputs.force) && '--force' || '' }}
           ${{ inputs.history && '--history' || '' }}
 
       - name: Export
