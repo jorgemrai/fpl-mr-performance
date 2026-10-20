@@ -15,9 +15,7 @@ on:
         default: false
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read # el push va con la deploy key, no con GITHUB_TOKEN
 
 concurrency:
   group: update-data
@@ -27,7 +25,11 @@ jobs:
   update:
     runs-on: ubuntu-latest
     steps:
+      # Deploy key con escritura: el ruleset de `main` solo deja pasar el push del bot por esta vía
+      # (en repos personales no existe el bypass para "GitHub Actions").
       - uses: actions/checkout@v4
+        with:
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
 
       - uses: astral-sh/setup-uv@v6
 
@@ -61,12 +63,5 @@ jobs:
           fi
           gw=$(jq -r .gw web/public/data/meta.json)
           git commit -m "data: GW${gw} update $(date -u +%Y-%m-%d)"
+          # El push con deploy key SÍ dispara deploy.yml (on: push a main): no hace falta llamarlo aquí.
           git push
-
-  deploy:
-    needs: update
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/deploy.yml

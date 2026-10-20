@@ -4,8 +4,6 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  # Llamado por update.yml: un push con GITHUB_TOKEN no dispara otros workflows.
-  workflow_call:
 
 permissions:
   contents: read
