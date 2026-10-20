@@ -142,9 +142,9 @@ make sql       # resumen de snapshots con DuckDB
 4. **Export** — `export.py` → `players.json` + `meta.json`; test de esquema y tamaño < 2 MB.
 5. **Front: tema + tabla** — Next.js export, `theme.css`, tabla filtrable (posición, precio, equipo) y ordenable, footer.
 6. **Front: /compare** — buscador de 2-4 jugadores, radar Recharts con percentiles, sincronizado con `?ids=`.
-7. **CI/CD** — `update.yml` (cron diario + dispatch, `permissions: contents: write`: ingest + export + commit)
-   que llama a `deploy.yml` vía `workflow_call` al terminar (un push con `GITHUB_TOKEN` no dispara otros
-   workflows). `deploy.yml` también corre en push a `main`; publica solo `web/out`.
+7. **CI/CD** — `update.yml` (cron diario + dispatch: ingest + export + commit). Hace push a `main` con la
+   deploy key (`secrets.DEPLOY_KEY`, bypass del ruleset); ese push dispara `deploy.yml` (on: push a `main`),
+   que publica solo `web/out`.
 
 ## Notas del entorno
 - El sandbox de desarrollo de Claude no tiene salida a `fantasy.premierleague.com` (proxy 403).
