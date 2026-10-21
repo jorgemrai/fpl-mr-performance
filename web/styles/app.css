@@ -159,3 +159,12 @@ td.sel { width: 1%; }
 .discards summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 .compare-grid td { white-space: normal; }
 .players .rivals { flex-wrap: nowrap; }
+
+/* Filtro "mis jugadores" en /captain */
+.my-filter { margin: 16px 0; display: flex; flex-direction: column; gap: 8px; }
+.my-filter h2 { margin: 0; font-size: 1.1rem; }
+.my-filter .field { max-width: 420px; }
+.my-filter .btn-ghost { align-self: flex-start; }
+.best-vs-global { background: var(--surface); border-left: 4px solid var(--link); padding: 8px 12px; border-radius: 0 var(--radius) var(--radius) 0; }
+.my-discards { padding-left: 20px; }
+.my-discards li { margin: 4px 0; }
