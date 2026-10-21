@@ -246,11 +246,16 @@ export default function CaptainView() {
         {deadline && <span className="muted"> · deadline {deadline}</span>}
         <span className="muted">
           {" "}
-          · {cap.candidates.length} candidatos · rival en {cap.horizonGws === 1 ? "la próxima GW" : `las próximas ${cap.horizonGws} GW`}
+          · {cap.legacyCandidateCount ?? cap.candidates.length} candidatos · rival en {cap.horizonGws === 1 ? "la próxima GW" : `las próximas ${cap.horizonGws} GW`}
         </span>
       </p>
       {players && <MyPlayersFilter players={players} selected={selected} onChange={updateSelection} saveFailed={saveFailed} />}
-      {selected.length > 0 ? (
+      {selected.length > 0 && cap.candidates.length === 0 ? (
+        <p className="alert" role="status">
+          Los datos todavía están en el formato anterior: el filtro por tus jugadores estará disponible tras la próxima
+          actualización (Update FPL data).
+        </p>
+      ) : selected.length > 0 ? (
         <MyPlayersView cap={cap} selected={selected} byId={byId} />
       ) : (
         <>
@@ -281,7 +286,7 @@ export default function CaptainView() {
         <li>Sin partido en la GW {cap.gw}: fuera.</li>
       </ul>
       <p>
-        <strong>{cap.candidates.length}</strong> candidatos · <strong>{cap.excluded}</strong> descartados:
+        <strong>{cap.legacyCandidateCount ?? cap.candidates.length}</strong> candidatos · <strong>{cap.excluded}</strong> descartados:
       </p>
       <ul className="reason-counts">
         {Object.entries(cap.discardedByReason ?? {}).map(([r, n]) => (

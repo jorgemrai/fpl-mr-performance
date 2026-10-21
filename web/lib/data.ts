@@ -118,6 +118,8 @@ export interface Captain {
   minChanceOfPlaying: number;
   /** Todos los candidatos, en orden global (puesto = índice + 1). */
   candidates: CaptainCandidate[];
+  /** Solo con un captain.json del esquema anterior: número de candidatos (sin la lista). */
+  legacyCandidateCount?: number | null;
   excluded: number;
   top: CaptainPick[];
   discarded: CaptainDiscard[];
@@ -172,4 +174,23 @@ export function usePlayers(): State<Player[]> {
   return { data: normalized, error };
 }
 export const useMeta = () => useJson<Meta>("/data/meta.json");
-export const useCaptain = () => useJson<Captain>("/data/captain.json");
+/** captain.json del esquema anterior (candidates = número, discarded con id/reason/detail)
+ *  → esquema actual, hasta que update.yml lo regenere. Sin candidatos no hay filtro "mis jugadores". */
+export function normalizeCaptain(raw: Captain): Captain {
+  const legacy = raw as unknown as {
+    candidates: unknown;
+    discarded: ({ i?: number; r?: string[]; id?: number; reason?: string; detail?: string | null } & Record<string, unknown>)[];
+  };
+  const candidates = Array.isArray(legacy.candidates) ? (legacy.candidates as Captain["candidates"]) : [];
+  const discarded = (legacy.discarded ?? []).map((d) =>
+    Array.isArray(d.r) ? (d as unknown as CaptainDiscard) : { i: d.id ?? 0, r: d.reason ? [d.reason] : [], ...(d.detail ? { n: d.detail } : {}) },
+  );
+  const legacyCount = typeof legacy.candidates === "number" ? legacy.candidates : null;
+  return { ...raw, candidates, discarded, legacyCandidateCount: legacyCount };
+}
+
+export function useCaptain(): State<Captain> {
+  const { data, error } = useJson<Captain>("/data/captain.json");
+  const normalized = useMemo(() => (data ? normalizeCaptain(data) : null), [data]);
+  return { data: normalized, error };
+}
