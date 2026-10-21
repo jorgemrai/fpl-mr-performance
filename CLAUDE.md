@@ -22,6 +22,7 @@ pipeline/
   ingest.py          # bootstrap-static + fixtures → data/snapshots/gw{N}*.parquet  (--force, --history)
   export.py          # snapshot → web/public/data/players.json + meta.json + captain.json
   captain.py         # capitán sugerido: FDR, filtro de titularidad, score, capitán/vice (puro)
+  captain_log.py     # recomendación congelada en el deadline → data/captain_log/gw{N}.json
   metrics/
     core.py          # funciones puras: ppm, per90, minutes_pct, defcon90, availability_chance…
     defcon.py        # umbral DefCon (game_config → config/metrics.yml) y frecuencia DefCon
@@ -35,6 +36,8 @@ config/
   metrics.yml        # umbral DefCon por posición si game_config no lo trae
   radar.yml          # ejes por defecto / opcionales / máximo del radar
 data/snapshots/      # gw{N}.parquet, gw{N}.{fixtures,events,stats,history}.parquet, gw{N}.game_config.json
+data/captain_log/    # gw{N}.json: ranking del capitán tal como estaba antes del deadline (no se despliega)
+data/results/        # gw{N}.parquet: puntos reales por jugador de cada GW terminada (event/{N}/live)
 web/
   styles/theme.css   # ÚNICO sitio con colores (variables CSS)
   app/               # page.tsx (tabla), compare/page.tsx (radar), captain/page.tsx
@@ -111,6 +114,16 @@ Estado: `chance` = `chance_of_playing_next_round` si hay evento `is_next`, si no
   partidos `[fixture_id, opp, ha, diff]`, DGW) y **todos** los descartados (id, motivos, `news`, `chance`).
   `top` (top 5 + vice) no cambia. Claves cortas; < 150 KB sin comprimir.
 - Lógica del cliente en un módulo puro (`web/lib/myCaptain.ts`) con tests `node --test`.
+
+### Backtesting del capitán (bajo demanda, sin página pública)
+- `export.py` escribe `data/captain_log/gw{N}.json` en cada ejecución **mientras no haya pasado el deadline**
+  de la GW objetivo; después ya no se toca (= lo último publicado antes del deadline). Guarda el ranking
+  completo `[id, score, form, xgi90, ease, own]`, C/V, top y descartados con su motivo principal.
+- `ingest.py` descarga `event/{N}/live/` de cada GW con `finished == true` que falte en `data/results/`
+  (idempotente, independiente de `--force`; un fallo avisa y no corta el snapshot).
+- `gw7.json` está reconstruido del historial de git (`partial: true`, solo el top 5).
+- El análisis lo hace Claude cuando se le pide, leyendo esos archivos: puntos del C vs el mejor candidato,
+  acierto top 1/top 5, *regret* y referencias simples (más poseído, más forma). No hay página ni JSON público.
 
 ### Front
 - Next.js (App Router) + TypeScript estricto + Recharts. `output: 'export'`, `images.unoptimized = true`,

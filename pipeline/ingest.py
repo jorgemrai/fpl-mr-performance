@@ -239,6 +239,43 @@ def build_fixture_stats(fixtures: list[dict]) -> pl.DataFrame:
     return pl.DataFrame(rows, schema=schema)
 
 
+def build_results(live: dict, gw: int) -> pl.DataFrame:
+    """event/{gw}/live/ → [gw, id, minutes, total_points]. Doble jornada: la API ya suma ambos partidos."""
+    elements = live.get("elements") if isinstance(live, dict) else None
+    if not isinstance(elements, list):
+        raise ValueError(f"event/{gw}/live: respuesta sin lista 'elements'")
+    rows = []
+    for el in elements:
+        stats = el.get("stats") if isinstance(el, dict) else None
+        if not isinstance(stats, dict) or "id" not in el:
+            raise ValueError(f"event/{gw}/live: elemento sin 'id' o 'stats'")
+        rows.append({"gw": gw, "id": el["id"], "minutes": stats.get("minutes"), "total_points": stats.get("total_points")})
+    schema = {"gw": pl.Int32, "id": pl.Int64, "minutes": pl.Int64, "total_points": pl.Int64}
+    return pl.DataFrame(rows, schema=schema)
+
+
+def missing_results(events: list[dict], results_dir: Path) -> list[int]:
+    """GW terminadas (finished = bonus cerrados) que aún no tienen data/results/gw{N}.parquet."""
+    return [int(ev["id"]) for ev in events if ev.get("finished") and not (results_dir / f"gw{ev['id']}.parquet").exists()]
+
+
+def fetch_results(client: httpx.Client, events: list[dict], results_dir: Path) -> list[Path]:
+    """Descarga los puntos reales de cada GW terminada que falte. Un fallo avisa pero no corta la ingesta."""
+    written = []
+    for gw in missing_results(events, results_dir):
+        try:
+            df = build_results(get_json(client, f"{BASE_URL}/event/{gw}/live/"), gw)
+        except Exception as exc:  # noqa: BLE001 — los resultados nunca deben tumbar el snapshot diario
+            print(f"  results GW{gw}: no disponible ({exc})", file=sys.stderr)
+            continue
+        results_dir.mkdir(parents=True, exist_ok=True)
+        path = results_dir / f"gw{gw}.parquet"
+        df.write_parquet(path)
+        written.append(path)
+        print(f"  results GW{gw}: {df.height} jugadores → {path}")
+    return written
+
+
 def build_history(summaries: dict[int, dict]) -> pl.DataFrame:
     rows = [{k: h.get(k) for k in HISTORY_FIELDS} for s in summaries.values() for h in s.get("history", [])]
     if not rows:
@@ -259,10 +296,13 @@ def run(
     history: bool = False,
     concurrency: int = DEFAULT_CONCURRENCY,
     transport: httpx.BaseTransport | None = None,
+    results_dir: Path | None = None,
 ) -> Path | None:
     """Devuelve la ruta del snapshot escrito, o None si ya existía (sin --force)."""
     with httpx.Client(headers=HEADERS, timeout=TIMEOUT_S, transport=transport) as client:
         bootstrap, fixtures = fetch_core(client)
+        # Puntos reales de las GW ya cerradas (para backtesting); idempotente, independiente de --force.
+        fetch_results(client, bootstrap["events"], results_dir or out_dir.parent / "results")
 
     gw = current_gw(bootstrap["events"])
     path = snapshot_path(out_dir, gw)
