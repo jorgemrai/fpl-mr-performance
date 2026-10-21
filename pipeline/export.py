@@ -11,7 +11,7 @@ from pathlib import Path
 import polars as pl
 import yaml
 
-from pipeline import captain
+from pipeline import captain, captain_log
 from pipeline.metrics import METRICS, add_metrics, add_percentiles, min_minutes
 from pipeline.metrics.core import availability_chance, form_last_n
 from pipeline.metrics.defcon import defcon_frequency, defcon_thresholds
@@ -164,7 +164,11 @@ def dumps(obj) -> str:
 
 
 def run(
-    snapshot_dir: Path = SNAPSHOT_DIR, out_dir: Path = OUT_DIR, captain_config: Path = captain.CONFIG_PATH
+    snapshot_dir: Path = SNAPSHOT_DIR,
+    out_dir: Path = OUT_DIR,
+    captain_config: Path = captain.CONFIG_PATH,
+    log_dir: Path | None = None,
+    now: datetime | None = None,
 ) -> tuple[Path, Path]:
     gw = latest_gw(snapshot_dir)
     players = pl.read_parquet(snapshot_dir / f"gw{gw}.parquet")
@@ -209,6 +213,11 @@ def run(
     cap = captain.build_captain(table, fixtures, next_gw, deadline, captain.load_config(captain_config))
     (out_dir / "captain.json").write_text(dumps(cap))
     print(f"Capitán GW{next_gw}: {len(cap['candidates'])} candidatos → {out_dir / 'captain.json'}")
+
+    # Recomendación congelada en el deadline (data/captain_log/, junto a data/snapshots; no se publica).
+    log_dir = log_dir if log_dir is not None else snapshot_dir.parent / "captain_log"
+    logged = captain_log.write_log(cap, table, players["fetched_at"][0], log_dir, now)
+    print(f"  captain_log: {logged}" if logged else "  captain_log: deadline pasado, registro congelado")
     return players_path, meta_path
 
 
