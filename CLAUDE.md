@@ -41,7 +41,7 @@ web/
   components/
   lib/
   public/data/       # players.json, meta.json (generados)
-.github/workflows/   # update.yml (cron), deploy.yml (Pages)
+.github/workflows/   # update.yml (cron), deploy.yml (Pages), ci.yml (tests + build en PRs)
 Makefile
 BACKLOG.md           # fases 2-4, no se implementan
 ```
@@ -145,6 +145,7 @@ make install   # uv sync + npm ci
 make ingest    # descarga GW actual → data/snapshots/   (FORCE=1 sobrescribe, HISTORY=1 element-summary)
 make export    # genera web/public/data/{players,meta}.json
 make test      # pytest
+make test-web  # tests del cliente (node --test, lib/*.test.ts)
 make dev       # next dev en localhost:3000
 make build     # next build (export estático a web/out)
 make sql       # resumen de snapshots con DuckDB
