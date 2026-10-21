@@ -1,0 +1,43 @@
+name: CI
+
+# Tests y build en cada PR (Dependabot y colaboradores incluidos). Solo lectura: sin secretos
+# y sin escribir en el repo ni en Pages, así que es seguro también para PRs desde forks.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Install
+        run: uv sync --frozen
+      - name: pytest (sin red, fixtures reales)
+        run: uv run pytest -q
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Tests del cliente (node --test)
+        run: npm test
+      - name: Build (output export + typecheck)
+        run: npm run build

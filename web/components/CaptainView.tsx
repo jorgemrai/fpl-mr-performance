@@ -1,19 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useCaptain, useMeta, type CaptainFixture, type CaptainPick } from "@/lib/data";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import MyPlayersFilter from "@/components/MyPlayersFilter";
+import { REASON_LABELS, discardDetail, type CaptainCandidate, type CaptainDiscard } from "@/lib/captain";
+import {
+  useCaptain,
+  useMeta,
+  usePlayers,
+  type Captain,
+  type CaptainFixture,
+  type CaptainPick,
+  type Player,
+} from "@/lib/data";
+import { filterCaptain, loadSelection, MAX_CARDS, saveSelection, scoreGap, type KeyValueStore } from "@/lib/myCaptain";
 import { fmtPrice } from "@/lib/format";
 import { isStale } from "@/lib/staleness";
-
-const REASON_LABELS: Record<string, string> = {
-  portero: "Portero",
-  "lesión": "Lesión",
-  duda: "Duda",
-  "sanción": "Sanción",
-  "no disponible": "No disponible",
-  "pocos minutos": "Pocos minutos",
-  "sin partido": "Sin partido",
-};
 
 /** Deadline en hora de Ecuador (UTC-5, sin horario de verano). */
 export function fmtDeadlineEcuador(iso: string): string {
@@ -33,11 +35,24 @@ function compareHref(pick: CaptainPick, captainId: number, viceId: number | unde
   return `/compare/?ids=${[pick.id, other].filter(Boolean).join(",")}`;
 }
 
-function PickCard({ pick, captainId, viceId }: { pick: CaptainPick; captainId: number; viceId?: number }) {
+function PickCard({
+  pick,
+  captainId,
+  viceId,
+  globalRank,
+}: {
+  pick: CaptainPick;
+  captainId: number;
+  viceId?: number;
+  globalRank?: number;
+}) {
   return (
     <article className={`card pick${pick.role ? ` pick-${pick.role.toLowerCase()}` : ""}`}>
       <header className="pick-head">
-        <span className="pick-rank">#{pick.rank}</span>
+        <span className="pick-rank" title={globalRank ? `Puesto ${globalRank} en el ranking global` : undefined}>
+          #{pick.rank}
+          {globalRank && <small className="muted"> · {globalRank}º global</small>}
+        </span>
         {pick.role && (
           <span className={`badge badge-${pick.role.toLowerCase()}`} title={pick.role === "C" ? "Capitán" : "Vicecapitán"}>
             {pick.role}
@@ -80,9 +95,129 @@ function PickCard({ pick, captainId, viceId }: { pick: CaptainPick; captainId: n
   );
 }
 
+/** Candidato compacto de captain.json → formato de tarjeta (mismos números, sin recalcular). */
+function toPick(c: CaptainCandidate, p: Player | undefined, rank: number, role: "C" | "V" | null, gw: number): CaptainPick {
+  const target = c.m.filter((m) => m[4] === gw);
+  return {
+    rank,
+    id: c.i,
+    name: p?.name ?? `#${c.i}`,
+    team: p?.team ?? "—",
+    pos: p?.pos ?? "MID",
+    price: p?.price ?? 0,
+    role,
+    score: c.s,
+    form: c.f[0],
+    xgi90: c.x[0],
+    fdr: target.reduce((acc, m) => acc + m[3], 0),
+    ease: c.e[0],
+    dgw: c.d === 1,
+    fixtures: c.m.map(([, opp, ha, difficulty, fgw]) => ({ gw: fgw, opp, home: ha === "H", difficulty })),
+    pct: { form: c.f[1], xgi90: c.x[1], ease: c.e[1] },
+  };
+}
+
+function safeStore(): KeyValueStore | null {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function MyPlayersView({ cap, selected, byId }: { cap: Captain; selected: number[]; byId: Map<number, Player> }) {
+  const f = filterCaptain(cap, selected);
+  const gw = cap.gw!;
+  const name = (id: number) => byId.get(id)?.name ?? `#${id}`;
+  const gap = scoreGap(f);
+  const shown = f.ranking.slice(0, MAX_CARDS);
+
+  return (
+    <section aria-label="Ranking de mis jugadores">
+      {f.best && f.globalBest && (
+        <p className="best-vs-global">
+          Tu mejor opción: <strong>{name(f.best.id)}</strong> (score {f.best.score.toFixed(1)}, puesto {f.best.rank} de{" "}
+          {f.totalCandidates}). Mejor global: <strong>{name(f.globalBest.id)}</strong> (score{" "}
+          {f.globalBest.score.toFixed(1)}). Diferencia: {gap?.toFixed(1)}.
+        </p>
+      )}
+      {f.ranking.length < 2 ? (
+        <p className="alert" role="status">
+          {f.ranking.length === 0
+            ? "Ninguno de tus jugadores pasa el filtro de titularidad para esta jornada."
+            : "Solo uno de tus jugadores pasa el filtro de titularidad: no hay ranking que comparar."}{" "}
+          Añade más jugadores arriba o quita el filtro para ver el ranking global.
+        </p>
+      ) : (
+        <>
+          {f.viceNote && <p className="small warn">{f.viceNote}</p>}
+          <p>
+            <Link className="btn" href={`/compare/?ids=${shown.slice(0, 4).map((r) => r.candidate.i).join(",")}`}>
+              Comparar mis {Math.min(4, shown.length)} mejores en el radar
+            </Link>
+          </p>
+          <div className="picks">
+            {shown.map((r, idx) => (
+              <PickCard
+                key={r.candidate.i}
+                pick={toPick(r.candidate, byId.get(r.candidate.i), idx + 1, r.role, gw)}
+                captainId={f.captainId!}
+                viceId={f.viceId ?? undefined}
+                globalRank={r.globalRank}
+              />
+            ))}
+          </div>
+          {f.ranking.length > MAX_CARDS && (
+            <p className="muted small">
+              Y {f.ranking.length - MAX_CARDS} elegibles más:{" "}
+              {f.ranking.slice(MAX_CARDS).map((r) => `${name(r.candidate.i)} (${r.globalRank}º)`).join(", ")}.
+            </p>
+          )}
+        </>
+      )}
+
+      {(f.discarded.length > 0 || f.noData.length > 0) && (
+        <>
+          <h2>Tus jugadores fuera del ranking</h2>
+          <ul className="my-discards">
+            {f.discarded.map((d: CaptainDiscard) => {
+              const p = byId.get(d.i);
+              const detail = discardDetail(d, p);
+              const label =
+                d.r[0] === "portero" ? "no aplica a capitán" : d.r.map((r) => (REASON_LABELS[r] ?? r).toLowerCase()).join(" · ");
+              return (
+                <li key={d.i}>
+                  <strong>{p?.name ?? `#${d.i}`}</strong> <span className="muted small">{p ? `${p.team} · ${p.pos}` : ""}</span>
+                  : {label}
+                  {detail && <span className="muted small"> · {detail}</span>}
+                </li>
+              );
+            })}
+            {f.noData.map((id) => (
+              <li key={id}>
+                <strong>{name(id)}</strong>: sin datos esta jornada
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function CaptainView() {
   const { data: cap, error } = useCaptain();
+  const { data: players } = usePlayers();
+  const byId = useMemo(() => new Map((players ?? []).map((p) => [p.id, p])), [players]);
   const { data: meta, error: metaError } = useMeta();
+  // Selección "mis jugadores": solo en este navegador (localStorage), nunca en la URL.
+  const [selected, setSelected] = useState<number[]>([]);
+  const [saveFailed, setSaveFailed] = useState(false);
+  useEffect(() => setSelected(loadSelection(safeStore())), []);
+  const updateSelection = useCallback((ids: number[]) => {
+    setSelected(ids);
+    setSaveFailed(!saveSelection(safeStore(), ids));
+  }, []);
 
   if (error || metaError) return <p className="alert">No se pudieron cargar los datos ({error ?? metaError}).</p>;
   if (!cap || !meta) return <p className="muted">Cargando…</p>;
@@ -111,21 +246,28 @@ export default function CaptainView() {
         {deadline && <span className="muted"> · deadline {deadline}</span>}
         <span className="muted">
           {" "}
-          · {cap.candidates} candidatos · rival en {cap.horizonGws === 1 ? "la próxima GW" : `las próximas ${cap.horizonGws} GW`}
+          · {cap.candidates.length} candidatos · rival en {cap.horizonGws === 1 ? "la próxima GW" : `las próximas ${cap.horizonGws} GW`}
         </span>
       </p>
-      {vicePick && (
-        <p>
-          <Link className="btn" href={`/compare/?ids=${cap.top.slice(0, 4).map((p) => p.id).join(",")}`}>
-            Comparar top 4 en el radar
-          </Link>
-        </p>
+      {players && <MyPlayersFilter players={players} selected={selected} onChange={updateSelection} saveFailed={saveFailed} />}
+      {selected.length > 0 ? (
+        <MyPlayersView cap={cap} selected={selected} byId={byId} />
+      ) : (
+        <>
+          {vicePick && (
+            <p>
+              <Link className="btn" href={`/compare/?ids=${cap.top.slice(0, 4).map((p) => p.id).join(",")}`}>
+                Comparar top 4 en el radar
+              </Link>
+            </p>
+          )}
+          <div className="picks">
+            {cap.top.map((p) => (
+              <PickCard key={p.id} pick={p} captainId={captainPick.id} viceId={vicePick?.id} />
+            ))}
+          </div>
+        </>
       )}
-      <div className="picks">
-        {cap.top.map((p) => (
-          <PickCard key={p.id} pick={p} captainId={captainPick.id} viceId={vicePick?.id} />
-        ))}
-      </div>
 
       <h2>Filtro de titularidad</h2>
       <ul className="filter-rules">
@@ -139,7 +281,7 @@ export default function CaptainView() {
         <li>Sin partido en la GW {cap.gw}: fuera.</li>
       </ul>
       <p>
-        <strong>{cap.candidates}</strong> candidatos · <strong>{cap.excluded}</strong> descartados:
+        <strong>{cap.candidates.length}</strong> candidatos · <strong>{cap.excluded}</strong> descartados:
       </p>
       <ul className="reason-counts">
         {Object.entries(cap.discardedByReason ?? {}).map(([r, n]) => (
@@ -166,19 +308,23 @@ export default function CaptainView() {
               </thead>
               <tbody>
                 {cap.discarded
-                  .filter((d) => d.reason === reason)
-                  .map((d) => (
-                    <tr key={d.id}>
-                      <td>{d.name}</td>
-                      <td>{d.team}</td>
-                      <td>{d.pos}</td>
-                      <td>{d.pts}</td>
-                      <td>
-                        {REASON_LABELS[d.reason] ?? d.reason}
-                        {d.detail && <span className="muted small"> · {d.detail}</span>}
-                      </td>
-                    </tr>
-                  ))}
+                  .filter((d) => d.r[0] === reason)
+                  .map((d) => {
+                    const p = byId.get(d.i);
+                    const detail = discardDetail(d, p);
+                    return (
+                      <tr key={d.i}>
+                        <td>{p?.name ?? `#${d.i}`}</td>
+                        <td>{p?.team ?? "—"}</td>
+                        <td>{p?.pos ?? "—"}</td>
+                        <td>{p?.pts ?? "—"}</td>
+                        <td>
+                          {d.r.map((r) => REASON_LABELS[r] ?? r).join(" · ")}
+                          {detail && <span className="muted small"> · {detail}</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>

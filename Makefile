@@ -1,4 +1,4 @@
-.PHONY: install ingest export test dev build sql
+.PHONY: install ingest export test test-web dev build sql
 
 FORCE ?=
 HISTORY ?=
@@ -16,6 +16,9 @@ export:
 
 test:
 	uv run pytest -q
+
+test-web:
+	cd web && npm test
 
 dev:
 	cd web && npm run dev

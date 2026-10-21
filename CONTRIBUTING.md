@@ -33,7 +33,8 @@ make dev              # http://localhost:3000
 ## Antes de abrir un PR
 
 1. **Abre un issue primero** si el cambio es grande (métrica nueva, página nueva, cambio de diseño).
-2. **Tests en verde:** `make test` y `cd web && npm run build` (incluye el chequeo de tipos).
+2. **Tests en verde:** `make test`, `make test-web` y `cd web && npm run build` (incluye el chequeo de
+   tipos). El workflow **CI** los ejecuta en cada PR.
 3. **Métricas nuevas = función pura + test.** Van en `pipeline/metrics/`, sin I/O, con un test que use
    los JSON **reales** de `tests/fixtures/` o un DataFrame mínimo inline. No inventes datos de jugadores.
 4. **Divisiones por cero → `null`**, nunca `inf`. Menos de 90 minutos → métricas /90 en `null`.

@@ -41,7 +41,7 @@ def test_top5_only_available_players(real, cfg):
     table, fixtures, gw = real
     out = captain.build_captain(table, fixtures, gw, None, cfg)
     statuses = dict(table.select("id", "status").iter_rows())
-    assert len([t for t in out["top"] if t["rank"] <= cfg.top_n]) == min(cfg.top_n, out["candidates"])
+    assert len([t for t in out["top"] if t["rank"] <= cfg.top_n]) == min(cfg.top_n, len(out["candidates"]))
     assert all(statuses[t["id"]] == "a" for t in out["top"])
 
 
@@ -56,7 +56,7 @@ def test_injured_or_doubtful_never_in_top5(real, cfg, status, reason):
     )
     after = captain.build_captain(hurt, fixtures, gw, None, cfg)
     assert not {t["id"] for t in after["top"]} & set(targets)
-    reasons = {d["id"]: d["reason"] for d in after["discarded"]}
+    reasons = {d["i"]: d["r"][0] for d in after["discarded"]}
     assert all(reasons.get(pid) == reason for pid in targets if pid in reasons)
 
 
@@ -201,7 +201,76 @@ def test_discard_counts_sum_exactly_the_excluded(real, cfg):
     table, fixtures, gw = real
     out = captain.build_captain(table, fixtures, gw, None, cfg)
     assert sum(out["discardedByReason"].values()) == out["excluded"] == len(out["discarded"])
-    assert out["excluded"] + out["candidates"] == table.height
-    assert all(d["reason"] in captain.REASONS for d in out["discarded"])
+    assert out["excluded"] + len(out["candidates"]) == table.height
+    assert all(r in captain.REASONS for d in out["discarded"] for r in d["r"])
     for reason, n in out["discardedByReason"].items():
-        assert n == sum(d["reason"] == reason for d in out["discarded"])
+        assert n == sum(d["r"][0] == reason for d in out["discarded"])
+
+
+# ------------------------------------------------------------- captain.json v2 (todos los candidatos)
+
+
+def test_top5_equals_first_five_candidates(real, cfg):
+    table, fixtures, gw = real
+    out = captain.build_captain(table, fixtures, gw, None, cfg)
+    top5 = [t for t in out["top"] if t["rank"] <= cfg.top_n]
+    assert [c["i"] for c in out["candidates"][: cfg.top_n]] == [t["id"] for t in top5]
+    assert [c["s"] for c in out["candidates"][: cfg.top_n]] == [t["score"] for t in top5]
+    for c, t in zip(out["candidates"], top5):
+        assert (c["f"][1], c["x"][1], c["e"][1]) == (t["pct"]["form"], t["pct"]["xgi90"], t["pct"]["ease"])
+
+
+def test_candidates_and_discarded_partition_the_universe(real, cfg):
+    table, fixtures, gw = real
+    out = captain.build_captain(table, fixtures, gw, None, cfg)
+    cand = [c["i"] for c in out["candidates"]]
+    disc = [d["i"] for d in out["discarded"]]
+    assert len(cand) == len(set(cand)) and len(disc) == len(set(disc))
+    assert not set(cand) & set(disc)
+    assert set(cand) | set(disc) == set(table["id"])
+    # porteros, no disponibles ("u") y blancos están dentro de discarded con su motivo principal
+    status = dict(table.select("id", "status").iter_rows())
+    pos = dict(table.select("id", "position").iter_rows())
+    by_id = {d["i"]: d for d in out["discarded"]}
+    assert all(by_id[i]["r"][0] == "portero" for i in disc if pos[i] == "GKP")
+    assert all("no disponible" in by_id[i]["r"] for i in disc if status[i] == "u" and pos[i] != "GKP")
+
+
+def test_discarded_keep_all_reasons_news_and_chance(real, cfg, bootstrap):
+    table, fixtures, gw = real
+    out = captain.build_captain(table, fixtures, gw, None, cfg)
+    els = {e["id"]: e for e in bootstrap["elements"]}
+    for d in out["discarded"]:
+        e = els[d["i"]]
+        assert d.get("n") == (e["news"] or None)
+        assert d.get("c") == e["chance_of_playing_next_round"]
+        assert d["r"] and len(d["r"]) == len(set(d["r"]))
+    assert any(len(d["r"]) > 1 for d in out["discarded"]), "debe haber jugadores con varios motivos"
+
+
+def test_candidates_match_golden_order_and_scores(real, cfg):
+    import json
+
+    from tests.golden_captain import GOLDEN
+
+    golden = json.loads(GOLDEN.read_text())
+    table, fixtures, gw = real
+    out = captain.build_captain(table, fixtures, gw, None, cfg)
+    assert [c["i"] for c in out["candidates"]] == [pid for pid, _ in golden["ranked"]]
+    assert [c["s"] for c in out["candidates"]] == [round(s, 1) for _, s in golden["ranked"]]
+
+
+def test_dgw_candidate_lists_both_matches_and_flag(real, cfg):
+    table, fixtures, gw = real
+    team, fx = _team_with_target_fixture(fixtures, gw)
+    later = fixtures.filter(
+        (pl.col("event") > gw) & ~pl.col("finished") & ((pl.col("team_h") == team) | (pl.col("team_a") == team))
+    ).row(0, named=True)
+    dgw = fixtures.with_columns(event=pl.when(pl.col("id") == later["id"]).then(gw).otherwise(pl.col("event")))
+    out = captain.build_captain(table, dgw, gw, None, cfg)
+    team_ids = set(table.filter(pl.col("team") == team)["id"])
+    rows = [c for c in out["candidates"] if c["i"] in team_ids]
+    assert rows, "el equipo debe tener algún candidato"
+    for c in rows:
+        assert c.get("d") == 1
+        assert sorted(m[0] for m in c["m"]) == sorted([fx["id"], later["id"]])

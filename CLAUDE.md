@@ -41,7 +41,7 @@ web/
   components/
   lib/
   public/data/       # players.json, meta.json (generados)
-.github/workflows/   # update.yml (cron), deploy.yml (Pages)
+.github/workflows/   # update.yml (cron), deploy.yml (Pages), ci.yml (tests + build en PRs)
 Makefile
 BACKLOG.md           # fases 2-4, no se implementan
 ```
@@ -96,6 +96,22 @@ Estado: `chance` = `chance_of_playing_next_round` si hay evento `is_next`, si no
 - Front: si la GW actual (según `meta.deadlines`) supera `meta.gw` en más de 1 → banner
   "Datos desactualizados" y no se muestra el ranking. Deadline en hora de Ecuador (UTC-5).
 
+### Capitán filtrado por "mis jugadores" (`/captain`)
+- Buscador en `/captain` para elegir jugadores (por `id`, nunca por `web_name`: hay 18 nombres repetidos).
+  Con al menos uno elegido, el ranking muestra solo esos; con el filtro vacío, `/captain` se ve igual que siempre.
+- **Misma fórmula y mismos filtros**: el score de un jugador es idéntico con o sin filtro, y los percentiles
+  se calculan contra todo el universo de candidatos, nunca contra los elegidos.
+- C/V entre los elegidos (el vice no comparte partido; si no hay alternativa se dice). Los elegidos que no son
+  candidatos se listan con su motivo (porteros: "no aplica a capitán"; id inexistente: "sin datos").
+  Línea "Tu mejor vs. el mejor global" con puesto y diferencia de score.
+- **Privacidad:** la selección vive solo en el navegador (`localStorage` clave `mrp.captainFilter.v1`, en
+  try/catch; si falla, estado en memoria). Nunca en el repo, la URL, logs ni analítica. Los enlaces a
+  `/compare` solo llevan los 2-4 jugadores comparados.
+- `captain.json` publica **todos** los candidatos (id, score, valor y percentil de forma / xGI/90 / ease,
+  partidos `[fixture_id, opp, ha, diff]`, DGW) y **todos** los descartados (id, motivos, `news`, `chance`).
+  `top` (top 5 + vice) no cambia. Claves cortas; < 150 KB sin comprimir.
+- Lógica del cliente en un módulo puro (`web/lib/myCaptain.ts`) con tests `node --test`.
+
 ### Front
 - Next.js (App Router) + TypeScript estricto + Recharts. `output: 'export'`, `images.unoptimized = true`,
   `basePath` = `/<repo>` vía env `NEXT_PUBLIC_BASE_PATH` (vacío en local).
@@ -129,6 +145,7 @@ make install   # uv sync + npm ci
 make ingest    # descarga GW actual → data/snapshots/   (FORCE=1 sobrescribe, HISTORY=1 element-summary)
 make export    # genera web/public/data/{players,meta}.json
 make test      # pytest
+make test-web  # tests del cliente (node --test, lib/*.test.ts)
 make dev       # next dev en localhost:3000
 make build     # next build (export estático a web/out)
 make sql       # resumen de snapshots con DuckDB
