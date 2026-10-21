@@ -1,19 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCaptain, useMeta, type CaptainFixture, type CaptainPick } from "@/lib/data";
+import { useMemo } from "react";
+import { REASON_LABELS, discardDetail } from "@/lib/captain";
+import { useCaptain, useMeta, usePlayers, type CaptainFixture, type CaptainPick } from "@/lib/data";
 import { fmtPrice } from "@/lib/format";
 import { isStale } from "@/lib/staleness";
-
-const REASON_LABELS: Record<string, string> = {
-  portero: "Portero",
-  "lesión": "Lesión",
-  duda: "Duda",
-  "sanción": "Sanción",
-  "no disponible": "No disponible",
-  "pocos minutos": "Pocos minutos",
-  "sin partido": "Sin partido",
-};
 
 /** Deadline en hora de Ecuador (UTC-5, sin horario de verano). */
 export function fmtDeadlineEcuador(iso: string): string {
@@ -82,6 +74,8 @@ function PickCard({ pick, captainId, viceId }: { pick: CaptainPick; captainId: n
 
 export default function CaptainView() {
   const { data: cap, error } = useCaptain();
+  const { data: players } = usePlayers();
+  const byId = useMemo(() => new Map((players ?? []).map((p) => [p.id, p])), [players]);
   const { data: meta, error: metaError } = useMeta();
 
   if (error || metaError) return <p className="alert">No se pudieron cargar los datos ({error ?? metaError}).</p>;
@@ -111,7 +105,7 @@ export default function CaptainView() {
         {deadline && <span className="muted"> · deadline {deadline}</span>}
         <span className="muted">
           {" "}
-          · {cap.candidates} candidatos · rival en {cap.horizonGws === 1 ? "la próxima GW" : `las próximas ${cap.horizonGws} GW`}
+          · {cap.candidates.length} candidatos · rival en {cap.horizonGws === 1 ? "la próxima GW" : `las próximas ${cap.horizonGws} GW`}
         </span>
       </p>
       {vicePick && (
@@ -139,7 +133,7 @@ export default function CaptainView() {
         <li>Sin partido en la GW {cap.gw}: fuera.</li>
       </ul>
       <p>
-        <strong>{cap.candidates}</strong> candidatos · <strong>{cap.excluded}</strong> descartados:
+        <strong>{cap.candidates.length}</strong> candidatos · <strong>{cap.excluded}</strong> descartados:
       </p>
       <ul className="reason-counts">
         {Object.entries(cap.discardedByReason ?? {}).map(([r, n]) => (
@@ -166,19 +160,23 @@ export default function CaptainView() {
               </thead>
               <tbody>
                 {cap.discarded
-                  .filter((d) => d.reason === reason)
-                  .map((d) => (
-                    <tr key={d.id}>
-                      <td>{d.name}</td>
-                      <td>{d.team}</td>
-                      <td>{d.pos}</td>
-                      <td>{d.pts}</td>
-                      <td>
-                        {REASON_LABELS[d.reason] ?? d.reason}
-                        {d.detail && <span className="muted small"> · {d.detail}</span>}
-                      </td>
-                    </tr>
-                  ))}
+                  .filter((d) => d.r[0] === reason)
+                  .map((d) => {
+                    const p = byId.get(d.i);
+                    const detail = discardDetail(d, p);
+                    return (
+                      <tr key={d.i}>
+                        <td>{p?.name ?? `#${d.i}`}</td>
+                        <td>{p?.team ?? "—"}</td>
+                        <td>{p?.pos ?? "—"}</td>
+                        <td>{p?.pts ?? "—"}</td>
+                        <td>
+                          {d.r.map((r) => REASON_LABELS[r] ?? r).join(" · ")}
+                          {detail && <span className="muted small"> · {detail}</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>

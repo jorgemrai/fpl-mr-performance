@@ -208,7 +208,7 @@ def run(
 
     cap = captain.build_captain(table, fixtures, next_gw, deadline, captain.load_config(captain_config))
     (out_dir / "captain.json").write_text(dumps(cap))
-    print(f"Capitán GW{next_gw}: {cap['candidates']} candidatos → {out_dir / 'captain.json'}")
+    print(f"Capitán GW{next_gw}: {len(cap['candidates'])} candidatos → {out_dir / 'captain.json'}")
     return players_path, meta_path
 
 

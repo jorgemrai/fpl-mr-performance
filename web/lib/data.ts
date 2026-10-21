@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { withBase } from "./base";
+import type { CaptainCandidate, CaptainDiscard } from "./captain";
 
 export const METRICS = [
   "ppm",
@@ -115,10 +116,11 @@ export interface Captain {
   weights: { form: number; xgi90: number; ease: number };
   minMinutesPct: number;
   minChanceOfPlaying: number;
-  candidates: number;
+  /** Todos los candidatos, en orden global (puesto = índice + 1). */
+  candidates: CaptainCandidate[];
   excluded: number;
   top: CaptainPick[];
-  discarded: { id: number; name: string; team: string; pos: Position; pts: number; reason: string; detail: string | null }[];
+  discarded: CaptainDiscard[];
   discardedByReason: Record<string, number>;
 }
 
