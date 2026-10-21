@@ -96,6 +96,21 @@ Estado: `chance` = `chance_of_playing_next_round` si hay evento `is_next`, si no
 - Front: si la GW actual (según `meta.deadlines`) supera `meta.gw` en más de 1 → banner
   "Datos desactualizados" y no se muestra el ranking. Deadline en hora de Ecuador (UTC-5).
 
+### Capitán de "Mi equipo" (filtro privado sobre `/captain`)
+- **Misma fórmula y mismos filtros.** El score de un jugador es idéntico con o sin "Solo mi equipo".
+- **Percentiles contra todo el universo de candidatos**, nunca contra los 15 del usuario.
+- **Privacidad:** los IDs de la plantilla viven solo en el navegador (`localStorage`, clave versionada
+  `mrp.squad.v1`, todo en try/catch; si falla, estado en memoria). Nunca en el repo, la URL, logs ni analítica.
+  Los enlaces a `/compare` solo llevan los 2-4 jugadores comparados.
+- **Identidad por `id`**, nunca por `web_name` (hay 18 nombres repetidos en GW6).
+- `captain.json` publica **todos** los candidatos (id, score, valor y percentil de forma / xGI/90 / ease,
+  partidos `{fixture_id, opp, ha, diff}`, marca DGW) y **todos** los descartados (id, motivos, `news`,
+  `chance_of_playing`). `top` (top 5 + vice) no cambia. Claves cortas; < 150 KB sin comprimir.
+- El filtro se calcula en el cliente: ranking de los elegibles de la plantilla (hasta 5) con C/V (el vice no
+  comparte partido; si no hay alternativa se dice), descartados de la plantilla siempre visibles, porteros
+  "no aplica a capitán", IDs inexistentes o `status == "u"` como "sin datos", y "Tu mejor vs. el mejor global".
+- Lógica del cliente en módulos puros (`web/lib/squad.ts`, `web/lib/myCaptain.ts`) con tests `node:test`.
+
 ### Front
 - Next.js (App Router) + TypeScript estricto + Recharts. `output: 'export'`, `images.unoptimized = true`,
   `basePath` = `/<repo>` vía env `NEXT_PUBLIC_BASE_PATH` (vacío en local).
