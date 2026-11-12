@@ -27,11 +27,11 @@ jobs:
     steps:
       # Deploy key con escritura: el ruleset de `main` solo deja pasar el push del bot por esta vía
       # (en repos personales no existe el bypass para "GitHub Actions").
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ssh-key: ${{ secrets.DEPLOY_KEY }}
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
 
       - name: Install
         run: uv sync --frozen
