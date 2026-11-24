@@ -103,6 +103,8 @@ def to_records(df: pl.DataFrame, has_previous: bool = False) -> list[dict]:
             "pts": r["total_points"],
             "min": r["minutes"],
             "status": r["status"],
+            # Fecha de nacimiento (YYYY-MM-DD); la edad se calcula en el cliente según el deadline.
+            "born": r.get("birth_date") or None,
             "news": r["news"] or None,
             "chance": r["chance"],
             "m": {m: _round(r[m], DECIMALS[m]) for m in METRICS},

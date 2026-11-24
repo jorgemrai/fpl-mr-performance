@@ -129,6 +129,9 @@ Estado: `chance` = `chance_of_playing_next_round` si hay evento `is_next`, si no
 - Next.js (App Router) + TypeScript estricto + Recharts. `output: 'export'`, `images.unoptimized = true`,
   `basePath` = `/<repo>` vía env `NEXT_PUBLIC_BASE_PATH` (vacío en local).
 - Todo `fetch` de JSON pasa por `withBase()` (`web/lib/base.ts`). Nunca rutas absolutas a mano.
+- Edad: `players.json` lleva `born` (`birth_date` de la FPL); la edad se calcula en el cliente al deadline de la
+  próxima GW (`web/lib/age.ts`). Tabla: columna Edad, filtro "Solo U23" (≤ 23 al deadline; sin fecha → fuera)
+  y "Uno por club" (el mejor de cada equipo según el orden actual).
 - Estado de comparación en la URL: `/compare?ids=1,2,3&axes=ppm,form,…` (2-4 ids, 3-8 ejes de
   `config/radar.yml`). La URL es la fuente de verdad. Con un portero se ocultan los ejes DefCon con aviso.
 - Sin librerías de estado, sin CSS-in-JS. CSS plano + variables.

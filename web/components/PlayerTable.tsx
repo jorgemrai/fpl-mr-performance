@@ -12,16 +12,19 @@ import {
   type Player,
   type Position,
 } from "@/lib/data";
+import { ageAt, isU23, onePerClub, referenceDeadline, U23_MAX_AGE } from "@/lib/age";
 import { fmtDefconFreq, fmtDelta, fmtMetric, fmtPrice, pctTitle } from "@/lib/format";
 
-type SortKey = "name" | "team" | "pos" | "status" | "price" | "pts" | "min" | Metric;
+type SortKey = "name" | "team" | "pos" | "age" | "status" | "price" | "pts" | "min" | Metric;
 const MAX_COMPARE = 4;
 const STATUS_ORDER: Record<string, number> = { a: 0, d: 1, s: 2, i: 3, n: 4, u: 5 };
 
 const METRIC_COLUMNS: Metric[] = ["ppm", "pts90", "xgi90", "min_pct", "bps90", "form", "defcon90"];
 
-function sortValue(p: Player, key: SortKey): string | number | null {
+function sortValue(p: Player, key: SortKey, ref: Date): string | number | null {
   switch (key) {
+    case "age":
+      return ageAt(p.born, ref);
     case "name":
     case "team":
     case "pos":
@@ -46,6 +49,13 @@ export default function PlayerTable({ players, meta }: { players: Player[]; meta
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [showUnavailable, setShowUnavailable] = useState(false);
+  const [u23Only, setU23Only] = useState(false);
+  const [perClub, setPerClub] = useState(false);
+  // Edad al deadline de la próxima GW (regla de los challenges tipo "Wonderkids").
+  const ref = useMemo(() => referenceDeadline(meta?.deadlines, meta?.nextGw), [meta]);
+  const refLabel = ref.gw
+    ? `deadline de la GW${ref.gw} (${ref.date.toLocaleDateString("es-EC", { timeZone: "America/Guayaquil", dateStyle: "medium" })})`
+    : "hoy";
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "pts", desc: true });
   const [selected, setSelected] = useState<number[]>([]);
   const small = meta?.smallGroup ?? 30;
@@ -58,6 +68,7 @@ export default function PlayerTable({ players, meta }: { players: Player[]; meta
     const filtered = players.filter(
       (p) =>
         (showUnavailable || p.status !== "u") &&
+        (!u23Only || isU23(p.born, ref.date)) &&
         (pos === "ALL" || p.pos === pos) &&
         (team === "ALL" || p.team === team) &&
         p.price >= lo &&
@@ -65,14 +76,16 @@ export default function PlayerTable({ players, meta }: { players: Player[]; meta
         (!query || p.name.toLowerCase().includes(query) || p.fullName.toLowerCase().includes(query)),
     );
     const dir = sort.desc ? -1 : 1;
-    return filtered.sort((a, b) => {
-      const va = sortValue(a, sort.key);
-      const vb = sortValue(b, sort.key);
+    const sorted = filtered.sort((a, b) => {
+      const va = sortValue(a, sort.key, ref.date);
+      const vb = sortValue(b, sort.key, ref.date);
       if (va === null) return vb === null ? 0 : 1; // nulls al final
       if (vb === null) return -1;
       return (va < vb ? -1 : va > vb ? 1 : 0) * dir;
     });
-  }, [players, q, pos, team, minPrice, maxPrice, showUnavailable, sort]);
+    // "Uno por club": el mejor de cada equipo según el orden actual de la tabla.
+    return perClub ? onePerClub(sorted) : sorted;
+  }, [players, q, pos, team, minPrice, maxPrice, showUnavailable, u23Only, perClub, ref, sort]);
 
   const toggleSort = (key: SortKey) =>
     setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "name" && key !== "team" && key !== "pos" }));
@@ -132,13 +145,23 @@ export default function PlayerTable({ players, meta }: { players: Player[]; meta
           <input type="checkbox" checked={showUnavailable} onChange={(e) => setShowUnavailable(e.target.checked)} />
           Mostrar no disponibles
         </label>
+        <label className="check" title={`${U23_MAX_AGE} años o menos en el ${refLabel}`}>
+          <input type="checkbox" checked={u23Only} onChange={(e) => setU23Only(e.target.checked)} />
+          Solo U23
+        </label>
+        <label className="check" title="Deja solo el mejor de cada equipo según el orden actual de la tabla">
+          <input type="checkbox" checked={perClub} onChange={(e) => setPerClub(e.target.checked)} />
+          Uno por club
+        </label>
         <Link className="btn" aria-disabled={!canCompare} href={`/compare/?ids=${selected.join(",")}`}>
           Comparar ({selected.length}/{MAX_COMPARE})
         </Link>
       </div>
       <p className="muted small">
         {rows.length} jugadores. Marca de 2 a {MAX_COMPARE} para compararlos en el radar. Pasa el ratón por una métrica
-        para ver su percentil y el tamaño del grupo (n).
+        para ver su percentil y el tamaño del grupo (n). Edad al {refLabel}.
+        {u23Only && " Los jugadores sin fecha de nacimiento en la FPL no aparecen en el filtro U23."}
+        {perClub && " Uno por club: el mejor de cada equipo según la columna por la que ordenas."}
       </p>
       <div className="table-wrap">
         <table className="players">
@@ -147,6 +170,7 @@ export default function PlayerTable({ players, meta }: { players: Player[]; meta
               <Th k="name" label="Jugador" className="sticky" />
               <Th k="team" label="Equipo" />
               <Th k="pos" label="Pos" />
+              <Th k="age" label="Edad" num />
               <Th k="status" label="Estado" />
               <Th k="price" label="Precio" num />
               <Th k="pts" label="Pts" num />
@@ -179,6 +203,7 @@ export default function PlayerTable({ players, meta }: { players: Player[]; meta
                   </td>
                   <td>{p.team}</td>
                   <td>{p.pos}</td>
+                  <td className="num">{ageAt(p.born, ref.date) ?? "—"}</td>
                   <td>
                     <StatusBadge p={p} />
                   </td>
