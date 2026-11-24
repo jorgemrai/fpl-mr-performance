@@ -57,3 +57,11 @@ def test_latest_gw_ignores_side_files(tmp_path):
     for name in ["gw3.parquet", "gw12.parquet", "gw12.fixtures.parquet", "gw15.history.parquet"]:
         (tmp_path / name).touch()
     assert export.latest_gw(tmp_path) == 12
+
+
+def test_players_json_has_birth_date(exported, bootstrap):
+    _, players, _ = exported
+    born = {e["id"]: e.get("birth_date") for e in bootstrap["elements"]}
+    for p in players:
+        assert p["born"] == (born[p["id"]] or None)
+    assert sum(p["born"] is not None for p in players) > 0.9 * len(players)

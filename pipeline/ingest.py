@@ -47,6 +47,7 @@ ELEMENT_FIELDS = [
     "element_type",
     "status",
     "news",
+    "birth_date",
     "chance_of_playing_this_round",
     "chance_of_playing_next_round",
     "now_cost",

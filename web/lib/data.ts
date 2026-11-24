@@ -50,6 +50,8 @@ export interface Player {
   pts: number;
   min: number;
   status: string;
+  /** Fecha de nacimiento YYYY-MM-DD (null si la FPL no la publica). */
+  born: string | null;
   news: string | null;
   /** Probabilidad de jugar (next_round si hay próxima GW, si no this_round). null = sin alerta. */
   chance: number | null;
@@ -156,6 +158,7 @@ function normalizePlayer(p: Partial<Player> & Pick<Player, "id" | "name">): Play
     pts: 0,
     min: 0,
     status: "a",
+    born: null,
     news: null,
     chance: null,
     p: null,
